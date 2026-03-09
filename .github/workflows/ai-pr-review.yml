@@ -9,7 +9,6 @@ on:
       pr_number:
         description: "리뷰할 PR 번호"
         required: true
-        type: string
 
 permissions:
   contents: read
