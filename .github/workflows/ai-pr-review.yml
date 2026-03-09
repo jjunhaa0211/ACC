@@ -60,10 +60,14 @@ jobs:
 
       - name: Build PR diff
         id: diff
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
-          git fetch origin "${{ steps.pr.outputs.base_ref }}" --depth=1
-          git fetch origin "${{ steps.pr.outputs.head_sha }}" --depth=1
-          git diff --unified=0 "origin/${{ steps.pr.outputs.base_ref }}"..."${{ steps.pr.outputs.head_sha }}" > pr.diff
+          curl -sSf \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H "Accept: application/vnd.github.v3.diff" \
+            "${{ github.api_url }}/repos/${{ github.repository }}/compare/${{ steps.pr.outputs.base_ref }}...${{ steps.pr.outputs.head_sha }}" \
+            > pr.diff
           echo "diff_path=pr.diff" >> "$GITHUB_OUTPUT"
 
       - name: Review with OpenAI (manual only)
