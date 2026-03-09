@@ -1,0 +1,44 @@
+name: Web CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  static-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Validate source files
+        run: |
+          test -f index.html
+          test -f styles.css
+          test -f script.js
+          grep -q "안녕하세요! 반가워요!" script.js
+          grep -q "helloButton" index.html
+
+      - name: Headless smoke check
+        run: |
+          node -e "const fs=require('fs');const html=fs.readFileSync('index.html','utf8');if(!html.includes('styles.css')||!html.includes('script.js')){throw new Error('index.html missing css/js link');}console.log('smoke ok');"
+
+      - name: Upload web artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: acc-static-web
+          path: |
+            index.html
+            styles.css
+            script.js

@@ -1,0 +1,74 @@
+name: AI PR Review
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  ai-review:
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build PR diff
+        id: diff
+        run: |
+          git fetch origin "${{ github.base_ref }}" --depth=1
+          git diff --unified=0 "origin/${{ github.base_ref }}"..."${{ github.sha }}" > pr.diff
+          echo "diff_path=pr.diff" >> "$GITHUB_OUTPUT"
+
+      - name: Review with OpenAI (ChatGPT)
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: node .github/scripts/review-openai.mjs "${{ steps.diff.outputs.diff_path }}" > openai-review.md
+
+      - name: Review with Gemini
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: node .github/scripts/review-gemini.mjs "${{ steps.diff.outputs.diff_path }}" > gemini-review.md
+
+      - name: Compose PR comment
+        run: |
+          {
+            echo "## 🤖 AI CI 리뷰 결과"
+            echo
+            echo "### ChatGPT (OpenAI)"
+            cat openai-review.md
+            echo
+            echo "### Gemini"
+            cat gemini-review.md
+            echo
+            echo "---"
+            echo "_자동 생성 코멘트입니다. 필요 시 사람이 최종 확인하세요._"
+          } > ai-review-comment.md
+
+      - name: Find existing AI comment
+        id: find_comment
+        uses: peter-evans/find-comment@v3
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-author: github-actions[bot]
+          body-includes: "## 🤖 AI CI 리뷰 결과"
+
+      - name: Create or update AI comment
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-id: ${{ steps.find_comment.outputs.comment-id }}
+          body-path: ai-review-comment.md
+          edit-mode: replace
