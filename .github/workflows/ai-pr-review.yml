@@ -4,6 +4,11 @@ on:
   pull_request:
     branches: [main]
     types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "리뷰할 PR 번호"
+        required: true
 
 permissions:
   contents: read
@@ -11,7 +16,7 @@ permissions:
 
 jobs:
   ai-review:
-    if: github.event.pull_request.draft == false
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
 
     steps:
@@ -25,33 +30,86 @@ jobs:
         with:
           node-version: 20
 
+      - name: Resolve PR context
+        id: pr
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "pr_number=${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+            echo "base_ref=${{ github.event.pull_request.base.ref }}" >> "$GITHUB_OUTPUT"
+            echo "head_sha=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_OUTPUT"
+          else
+            pr_number="${{ github.event.inputs.pr_number }}"
+            pr_json=$(curl -sSf \
+              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              "${{ github.api_url }}/repos/${{ github.repository }}/pulls/${pr_number}")
+            base_ref=$(echo "$pr_json" | jq -r '.base.ref')
+            head_sha=$(echo "$pr_json" | jq -r '.head.sha')
+
+            if [ -z "$base_ref" ] || [ "$base_ref" = "null" ] || [ -z "$head_sha" ] || [ "$head_sha" = "null" ]; then
+              echo "PR 정보를 찾지 못했습니다. 입력한 pr_number를 확인하세요."
+              exit 1
+            fi
+
+            echo "pr_number=${pr_number}" >> "$GITHUB_OUTPUT"
+            echo "base_ref=${base_ref}" >> "$GITHUB_OUTPUT"
+            echo "head_sha=${head_sha}" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build PR diff
         id: diff
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
-          git fetch origin "${{ github.base_ref }}" --depth=1
-          git diff --unified=0 "origin/${{ github.base_ref }}"..."${{ github.sha }}" > pr.diff
+          curl -sSf \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H "Accept: application/vnd.github.v3.diff" \
+            "${{ github.api_url }}/repos/${{ github.repository }}/compare/${{ steps.pr.outputs.base_ref }}...${{ steps.pr.outputs.head_sha }}" \
+            > pr.diff
           echo "diff_path=pr.diff" >> "$GITHUB_OUTPUT"
 
-      - name: Review with OpenAI (ChatGPT)
+      - name: Review with OpenAI (manual only)
+        if: github.event_name == 'workflow_dispatch'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: node .github/scripts/review-openai.mjs "${{ steps.diff.outputs.diff_path }}" > openai-review.md
 
-      - name: Review with Gemini
+      - name: Review with Gemini (manual only)
+        if: github.event_name == 'workflow_dispatch'
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: node .github/scripts/review-gemini.mjs "${{ steps.diff.outputs.diff_path }}" > gemini-review.md
+
+      - name: Set AI sections for auto mode
+        if: github.event_name == 'pull_request'
+        run: |
+          echo "- 자동 PR 모드에서는 비용 절약을 위해 OpenAI 리뷰를 실행하지 않습니다." > openai-review.md
+          echo "- 자동 PR 모드에서는 비용 절약을 위해 Gemini 리뷰를 실행하지 않습니다." > gemini-review.md
+
+      - name: Review with Fallback
+        run: node .github/scripts/review-fallback.mjs "${{ steps.diff.outputs.diff_path }}" > fallback-review.md
 
       - name: Compose PR comment
         run: |
           {
             echo "## 🤖 AI CI 리뷰 결과"
             echo
+            if [ "${{ github.event_name }}" = "pull_request" ]; then
+              echo "- 실행 모드: 자동 PR(Fallback only)"
+            else
+              echo "- 실행 모드: 수동 실행(OpenAI + Gemini + Fallback)"
+            fi
+            echo
             echo "### ChatGPT (OpenAI)"
             cat openai-review.md
             echo
             echo "### Gemini"
             cat gemini-review.md
+            echo
+            echo "### Fallback (Rule-based)"
+            cat fallback-review.md
             echo
             echo "---"
             echo "_자동 생성 코멘트입니다. 필요 시 사람이 최종 확인하세요._"
@@ -61,14 +119,14 @@ jobs:
         id: find_comment
         uses: peter-evans/find-comment@v3
         with:
-          issue-number: ${{ github.event.pull_request.number }}
+          issue-number: ${{ steps.pr.outputs.pr_number }}
           comment-author: github-actions[bot]
           body-includes: "## 🤖 AI CI 리뷰 결과"
 
       - name: Create or update AI comment
         uses: peter-evans/create-or-update-comment@v4
         with:
-          issue-number: ${{ github.event.pull_request.number }}
+          issue-number: ${{ steps.pr.outputs.pr_number }}
           comment-id: ${{ steps.find_comment.outputs.comment-id }}
           body-path: ai-review-comment.md
           edit-mode: replace
