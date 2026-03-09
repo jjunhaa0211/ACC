@@ -81,12 +81,8 @@ jobs:
       - name: Set AI sections for auto mode
         if: github.event_name == 'pull_request'
         run: |
-          cat <<'EOF' > openai-review.md
-- 자동 PR 모드에서는 비용 절약을 위해 OpenAI 리뷰를 실행하지 않습니다.
-EOF
-          cat <<'EOF' > gemini-review.md
-- 자동 PR 모드에서는 비용 절약을 위해 Gemini 리뷰를 실행하지 않습니다.
-EOF
+          echo "- 자동 PR 모드에서는 비용 절약을 위해 OpenAI 리뷰를 실행하지 않습니다." > openai-review.md
+          echo "- 자동 PR 모드에서는 비용 절약을 위해 Gemini 리뷰를 실행하지 않습니다." > gemini-review.md
 
       - name: Review with Fallback
         run: node .github/scripts/review-fallback.mjs "${{ steps.diff.outputs.diff_path }}" > fallback-review.md
