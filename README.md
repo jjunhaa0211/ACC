@@ -21,6 +21,7 @@
 2. `AI PR Review` (`.github/workflows/ai-pr-review.yml`)
    - Pull Request 발생 시 변경 diff 생성
    - ChatGPT(OpenAI) + Gemini로 PR 리뷰
+   - API quota 부족 시 fallback 규칙 기반 리뷰 제공
    - 결과를 PR 코멘트로 자동 갱신
 
 ## GitHub Secrets 설정
@@ -30,6 +31,11 @@
 - `GEMINI_API_KEY`
 
 키가 없으면 워크플로는 실패하지 않고 "리뷰 스킵" 메시지를 남깁니다.
+
+## Troubleshooting
+- PR 코멘트에 `429`가 나오면 키 문제가 아니라 quota/billing 문제입니다.
+  - OpenAI: Billing, Usage limit 확인
+  - Gemini: Google AI Studio/GCP quota 및 결제 상태 확인
 
 ## 로컬 실행
 브라우저에서 `index.html`을 열면 바로 확인할 수 있습니다.

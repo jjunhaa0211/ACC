@@ -19,7 +19,7 @@ if (!apiKey) {
   process.exit(0);
 }
 
-const diff = rawDiff.slice(0, 12000);
+const diff = rawDiff.slice(0, 7000);
 const systemPrompt = [
   "너는 PR을 리뷰하는 시니어 소프트웨어 엔지니어다.",
   "한국어로 답하고, 짧고 명확하게 작성해라.",
@@ -42,6 +42,7 @@ try {
     body: JSON.stringify({
       model: "gpt-4.1-mini",
       temperature: 0.2,
+      max_output_tokens: 500,
       input: [
         {
           role: "system",
@@ -56,9 +57,15 @@ try {
   });
 
   if (!response.ok) {
+    if (response.status === 429) {
+      console.log("- OpenAI API 쿼터 부족(429)으로 AI 리뷰를 생성하지 못했습니다.");
+      console.log("- OpenAI Billing/Usage limit을 확인한 뒤 다시 실행하세요.");
+      process.exit(0);
+    }
+
     const body = await response.text();
     console.log(`- OpenAI API 호출 실패: ${response.status}`);
-    console.log(`- 응답: ${body.slice(0, 300)}`);
+    console.log(`- 응답 일부: ${body.slice(0, 180)}`);
     process.exit(0);
   }
 

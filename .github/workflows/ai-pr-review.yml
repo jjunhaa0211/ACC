@@ -42,6 +42,9 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: node .github/scripts/review-gemini.mjs "${{ steps.diff.outputs.diff_path }}" > gemini-review.md
 
+      - name: Review with Fallback Heuristic
+        run: node .github/scripts/review-fallback.mjs "${{ steps.diff.outputs.diff_path }}" > fallback-review.md
+
       - name: Compose PR comment
         run: |
           {
@@ -52,6 +55,9 @@ jobs:
             echo
             echo "### Gemini"
             cat gemini-review.md
+            echo
+            echo "### Fallback (Rule-based)"
+            cat fallback-review.md
             echo
             echo "---"
             echo "_자동 생성 코멘트입니다. 필요 시 사람이 최종 확인하세요._"

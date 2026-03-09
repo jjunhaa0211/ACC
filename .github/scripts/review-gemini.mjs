@@ -19,7 +19,7 @@ if (!apiKey) {
   process.exit(0);
 }
 
-const diff = rawDiff.slice(0, 12000);
+const diff = rawDiff.slice(0, 7000);
 const prompt = [
   "너는 PR 리뷰어다. 한국어로 간결하게 답해라.",
   "아래 Markdown 형식으로만 답해라:",
@@ -46,9 +46,15 @@ try {
   );
 
   if (!response.ok) {
+    if (response.status === 429) {
+      console.log("- Gemini API 쿼터 부족(429)으로 AI 리뷰를 생성하지 못했습니다.");
+      console.log("- Google AI Studio/GCP 결제 및 quota를 확인한 뒤 다시 실행하세요.");
+      process.exit(0);
+    }
+
     const body = await response.text();
     console.log(`- Gemini API 호출 실패: ${response.status}`);
-    console.log(`- 응답: ${body.slice(0, 300)}`);
+    console.log(`- 응답 일부: ${body.slice(0, 180)}`);
     process.exit(0);
   }
 
