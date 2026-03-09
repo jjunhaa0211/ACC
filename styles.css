@@ -1,11 +1,11 @@
 :root {
-  --bg-1: #ffe6c7;
-  --bg-2: #ffd6e8;
-  --bg-3: #d1f4ff;
-  --stage: rgba(255, 255, 255, 0.72);
-  --ink: #253047;
-  --hot: #ff5d8f;
-  --cool: #14b8a6;
+  --bg-1: #102542;
+  --bg-2: #f87060;
+  --bg-3: #f9c80e;
+  --stage: rgba(255, 255, 255, 0.84);
+  --ink: #11263e;
+  --hot: #009ffd;
+  --cool: #2a2a72;
 }
 
 * {
@@ -18,9 +18,9 @@ body {
   display: grid;
   place-items: center;
   overflow: hidden;
-  background: radial-gradient(circle at 10% 10%, var(--bg-3), transparent 35%),
-    radial-gradient(circle at 90% 20%, var(--bg-2), transparent 40%),
-    linear-gradient(120deg, var(--bg-1), #fff6d9 55%, #e8ffe6);
+  background: radial-gradient(circle at 15% 12%, var(--bg-3), transparent 35%),
+    radial-gradient(circle at 88% 16%, var(--bg-2), transparent 38%),
+    linear-gradient(120deg, var(--bg-1), #1b3b6f 58%, #2a2a72);
   font-family: "Gaegu", cursive;
   color: var(--ink);
 }
@@ -37,7 +37,7 @@ body {
 .shape-a {
   width: 280px;
   height: 280px;
-  background: #ffc8dd;
+  background: #ffd166;
   left: -70px;
   top: -90px;
 }
@@ -45,7 +45,7 @@ body {
 .shape-b {
   width: 320px;
   height: 320px;
-  background: #bde0fe;
+  background: #90caf9;
   right: -80px;
   bottom: -90px;
   animation-delay: 1.2s;
@@ -57,8 +57,8 @@ body {
   padding: 2.2rem 1.4rem 2rem;
   border-radius: 28px;
   background: var(--stage);
-  border: 2px solid rgba(255, 255, 255, 0.7);
-  box-shadow: 0 20px 55px rgba(34, 39, 55, 0.2);
+  border: 2px solid rgba(255, 255, 255, 0.78);
+  box-shadow: 0 20px 55px rgba(9, 22, 43, 0.35);
   backdrop-filter: blur(8px);
 }
 
@@ -79,20 +79,20 @@ h1 {
 .hello-button {
   border: 0;
   border-radius: 999px;
-  background: linear-gradient(120deg, var(--hot), #ff9471);
+  background: linear-gradient(120deg, var(--hot), var(--cool));
   color: #fff;
   font-family: "Do Hyeon", sans-serif;
   font-size: 1.1rem;
   letter-spacing: 0.04em;
   padding: 0.85rem 2rem;
   cursor: pointer;
-  box-shadow: 0 10px 24px rgba(255, 93, 143, 0.35);
+  box-shadow: 0 10px 24px rgba(0, 159, 253, 0.4);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .hello-button:hover {
   transform: translateY(-2px) scale(1.02);
-  box-shadow: 0 14px 28px rgba(255, 93, 143, 0.45);
+  box-shadow: 0 14px 28px rgba(0, 159, 253, 0.52);
 }
 
 .hello-button:active {
