@@ -19,8 +19,8 @@
    - 정적 웹 파일 아티팩트 업로드
 
 2. `AI PR Review` (`.github/workflows/ai-pr-review.yml`)
-   - Pull Request 발생 시 변경 diff 생성
-   - ChatGPT(OpenAI) + Gemini로 PR 리뷰
+   - Pull Request 발생 시 무료 fallback(규칙 기반) 리뷰만 자동 실행
+   - OpenAI/Gemini 리뷰는 Actions의 수동 실행(`workflow_dispatch`)에서만 실행
    - 결과를 PR 코멘트로 자동 갱신
 
 ## GitHub Secrets 설정
@@ -30,6 +30,13 @@
 - `GEMINI_API_KEY`
 
 키가 없으면 워크플로는 실패하지 않고 "리뷰 스킵" 메시지를 남깁니다.
+
+## 수동 AI 리뷰 실행 방법
+1. GitHub `Actions` 탭에서 `AI PR Review` 선택
+2. `Run workflow` 클릭
+3. `pr_number`에 리뷰할 PR 번호 입력 후 실행
+
+자동 PR 트리거는 비용 절약을 위해 fallback 리뷰만 수행합니다.
 
 ## 로컬 실행
 브라우저에서 `index.html`을 열면 바로 확인할 수 있습니다.
