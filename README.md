@@ -19,17 +19,18 @@
    - 정적 웹 파일 아티팩트 업로드
 
 2. `AI PR Review` (`.github/workflows/ai-pr-review.yml`)
-   - Pull Request 발생 시 변경 diff 생성
-   - ChatGPT(OpenAI) + Gemini로 PR 리뷰
+   - Pull Request 발생 시 fallback(규칙 기반) 리뷰 자동 실행
    - 결과를 PR 코멘트로 자동 갱신
+   - Gemini 상세 AI 리뷰는 GitHub App(`Gemini Code Assist`)에서 처리
 
-## GitHub Secrets 설정
-레포 `Settings > Secrets and variables > Actions`에 아래 키를 추가하세요.
+## Gemini Code Assist 설정(무료)
+링크 방식대로 API 키 없이 GitHub App으로 PR 리뷰를 받으려면 아래 순서로 진행하세요.
 
-- `OPENAI_API_KEY`
-- `GEMINI_API_KEY`
+1. GitHub Marketplace에서 `Gemini Code Assist` 앱 설치
+2. 설치 대상에 `jjunhaa0211/ACC` 레포 선택
+3. PR에서 코멘트로 `@gemini review` 요청
 
-키가 없으면 워크플로는 실패하지 않고 "리뷰 스킵" 메시지를 남깁니다.
+참고: 이 저장소의 GitHub Actions는 fallback 리뷰만 수행하며, Gemini 상세 리뷰는 앱이 담당합니다.
 
 ## 로컬 실행
 브라우저에서 `index.html`을 열면 바로 확인할 수 있습니다.
