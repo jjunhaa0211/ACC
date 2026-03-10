@@ -76,7 +76,7 @@ jobs:
           body-includes: "## 🚀 PR Preview"
 
       - name: Create or update preview comment
-        uses: peter-evans/create-or-update-comment@v4
+        uses: peter-evans/create-or-update-comment@v5
         with:
           issue-number: ${{ steps.pr.outputs.number }}
           comment-id: ${{ steps.find_comment.outputs.comment-id }}
@@ -115,7 +115,7 @@ jobs:
           body-includes: "## 🚀 PR Preview 설정 필요"
 
       - name: Create or update notice comment
-        uses: peter-evans/create-or-update-comment@v4
+        uses: peter-evans/create-or-update-comment@v5
         with:
           issue-number: ${{ steps.pr.outputs.number }}
           comment-id: ${{ steps.find_comment.outputs.comment-id }}
