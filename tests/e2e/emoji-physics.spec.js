@@ -1,7 +1,13 @@
 const { test, expect } = require("@playwright/test");
+const FIXED_VIEWPORT = { width: 1280, height: 720 };
+
+async function gotoWithViewport(page, path) {
+  await page.setViewportSize(FIXED_VIEWPORT);
+  await page.goto(path);
+}
 
 test("button click drops bouncing emojis inside the viewport", async ({ page }) => {
-  await page.goto("/?seed=7");
+  await gotoWithViewport(page, "/?seed=7");
 
   const button = page.locator("#dropButton");
   await expect(button).toBeVisible();
@@ -30,7 +36,7 @@ test("button click drops bouncing emojis inside the viewport", async ({ page }) 
 });
 
 test("user can drag and throw an emoji", async ({ page }) => {
-  await page.goto("/?seed=18&test=1");
+  await gotoWithViewport(page, "/?seed=18&test=1");
 
   await page.click("#dropButton");
 
@@ -81,10 +87,15 @@ test("user can drag and throw an emoji", async ({ page }) => {
 });
 
 test("snapshot: deterministic emoji scene", async ({ page }) => {
-  await page.goto("/?seed=20260310&test=1");
+  await gotoWithViewport(page, "/?seed=20260310&test=1");
 
   await page.click("#dropButton");
   await page.evaluate(() => {
+    const button = document.getElementById("dropButton");
+    if (button) {
+      button.style.display = "none";
+    }
+
     window.__emojiLab.runFrames(180);
   });
 

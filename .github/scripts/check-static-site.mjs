@@ -15,6 +15,9 @@ if (errors.length > 0) {
 
 const html = fs.readFileSync("index.html", "utf8");
 const js = fs.readFileSync("script.js", "utf8");
+const hasTailwindCdnScript = /<script[^>]*src=["']https:\/\/cdn\.tailwindcss\.com\/?["'][^>]*>\s*<\/script>/i.test(
+  html
+);
 
 const checks = [
   {
@@ -22,7 +25,7 @@ const checks = [
     fail: "index.html의 `<html>`에 `lang=\"ko\"`가 필요합니다."
   },
   {
-    ok: html.includes("cdn.tailwindcss.com"),
+    ok: hasTailwindCdnScript,
     fail: "index.html에 Tailwind CDN 로드가 필요합니다."
   },
   {
