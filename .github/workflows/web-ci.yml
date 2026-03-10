@@ -28,6 +28,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: npm
 
       - name: Validate core files
         run: |
@@ -47,6 +48,9 @@ jobs:
 
       - name: Static site validation
         run: node .github/scripts/check-static-site.mjs
+
+      - name: Install dependencies
+        run: npm ci
 
       - name: Upload web artifact
         uses: actions/upload-artifact@v4
@@ -95,3 +99,86 @@ jobs:
       - name: Skip notice
         if: steps.dep_graph.outputs.status != 'enabled'
         run: echo "Dependency Graph가 비활성이어서 Dependency Review를 건너뜁니다."
+
+  e2e-playwright:
+    name: E2E (Playwright)
+    runs-on: ubuntu-latest
+    needs: [quality-gate]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Run E2E tests
+        run: npm run test:e2e:ci
+
+  lighthouse:
+    name: Lighthouse CI
+    runs-on: ubuntu-latest
+    needs: [quality-gate]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Lighthouse quality gate
+        run: npm run test:lighthouse
+
+  web-ci-status:
+    name: Web CI
+    runs-on: ubuntu-latest
+    if: always()
+    needs:
+      - quality-gate
+      - secret-scan
+      - dependency-review
+      - e2e-playwright
+      - lighthouse
+
+    steps:
+      - name: Check upstream job results
+        run: |
+          fail=false
+
+          report() {
+            name="$1"
+            result="$2"
+            echo "${name}: ${result}"
+            if [ "${result}" = "failure" ] || [ "${result}" = "cancelled" ]; then
+              fail=true
+            fi
+          }
+
+          report "Quality Gate" "${{ needs.quality-gate.result }}"
+          report "Secret Scan" "${{ needs.secret-scan.result }}"
+          report "Dependency Review" "${{ needs.dependency-review.result }}"
+          report "E2E (Playwright)" "${{ needs.e2e-playwright.result }}"
+          report "Lighthouse CI" "${{ needs.lighthouse.result }}"
+
+          if [ "${fail}" = true ]; then
+            echo "One or more required Web CI jobs failed."
+            exit 1
+          fi
+
+          echo "Web CI aggregate check passed."

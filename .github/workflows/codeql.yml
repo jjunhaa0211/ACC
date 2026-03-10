@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   analyze:
-    name: Analyze (JavaScript)
+    name: CodeQL
     runs-on: ubuntu-latest
 
     steps:

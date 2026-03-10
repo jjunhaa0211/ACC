@@ -15,8 +15,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
-    name: Build Static Site
+  build-current:
+    name: Build Current
     runs-on: ubuntu-latest
 
     steps:
@@ -28,20 +28,115 @@ jobs:
           mkdir -p dist
           cp index.html styles.css script.js dist/
 
-      - name: Upload Pages artifact
+      - name: Upload current artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: dist
 
-  deploy:
-    name: Deploy to GitHub Pages
-    needs: build
+  deploy-current:
+    name: Deploy Current
+    needs: [build-current]
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+    outputs:
+      page_url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4
+
+  health-check-current:
+    name: Deploy Health Check
+    needs: [deploy-current]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check deployed page
+        env:
+          PAGE_URL: ${{ needs.deploy-current.outputs.page_url }}
+        run: |
+          if [ -z "$PAGE_URL" ]; then
+            echo "배포 URL이 비어 있습니다."
+            exit 1
+          fi
+
+          content=$(curl -fsSL "$PAGE_URL" || true)
+          if [ -z "$content" ]; then
+            echo "배포 페이지 응답이 비어 있습니다."
+            exit 1
+          fi
+
+          echo "$content" | grep -q "안녕하세요" || {
+            echo "헬스체크 실패: 기대 텍스트가 없습니다."
+            exit 1
+          }
+
+          echo "헬스체크 통과: $PAGE_URL"
+
+  rollback-build:
+    name: Rollback Build
+    needs: [health-check-current]
+    if: needs.health-check-current.result == 'failure' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Validate rollback commit
+        run: |
+          if [ -z "${{ github.event.before }}" ] || [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ]; then
+            echo "롤백 기준 커밋이 없어 롤백을 수행할 수 없습니다."
+            exit 1
+          fi
+
+      - name: Checkout previous commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.before }}
+
+      - name: Prepare rollback bundle
+        run: |
+          mkdir -p dist
+          cp index.html styles.css script.js dist/
+
+      - name: Upload rollback artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  rollback-deploy:
+    name: Rollback Deploy
+    needs: [rollback-build]
+    if: needs.rollback-build.result == 'success'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy rollback artifact
+        uses: actions/deploy-pages@v4
+
+  deploy-summary:
+    name: Deployment Summary
+    needs: [health-check-current, rollback-build, rollback-deploy]
+    if: always()
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Print summary
+        run: |
+          echo "health-check-current: ${{ needs.health-check-current.result }}"
+          echo "rollback-build: ${{ needs.rollback-build.result }}"
+          echo "rollback-deploy: ${{ needs.rollback-deploy.result }}"
+
+          if [ "${{ needs.health-check-current.result }}" = "success" ]; then
+            echo "현재 배포가 정상입니다."
+            exit 0
+          fi
+
+          if [ "${{ needs.rollback-deploy.result }}" = "success" ]; then
+            echo "헬스체크 실패 후 롤백 배포를 완료했습니다."
+            exit 0
+          fi
+
+          echo "헬스체크와 롤백 처리 모두 실패했습니다."
+          exit 1
