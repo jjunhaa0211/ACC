@@ -76,5 +76,22 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Check dependency graph status
+        id: dep_graph
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          status=$(gh api "repos/${{ github.repository }}" --jq '.security_and_analysis.dependency_graph.status' 2>/dev/null || echo "unknown")
+          if [ -z "$status" ] || [ "$status" = "null" ]; then
+            status="unknown"
+          fi
+          echo "status=${status}" >> "$GITHUB_OUTPUT"
+          echo "Dependency graph status: ${status}"
+
       - name: Dependency review
+        if: steps.dep_graph.outputs.status == 'enabled'
         uses: actions/dependency-review-action@v4
+
+      - name: Skip notice
+        if: steps.dep_graph.outputs.status != 'enabled'
+        run: echo "Dependency Graph가 비활성이어서 Dependency Review를 건너뜁니다."

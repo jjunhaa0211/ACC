@@ -20,7 +20,7 @@
 1. `Web CI` (`.github/workflows/web-ci.yml`)
    - 정적 사이트 구조/문법 검증
    - 시크릿 패턴 스캔(최근 커밋 히스토리 포함)
-   - 의존성 리뷰(Dependency Review)
+   - 의존성 리뷰(Dependency Review, Dependency Graph 활성 시)
    - 정적 웹 파일 아티팩트 업로드
 
 2. `AI PR Review` (`.github/workflows/ai-pr-review.yml`)
