@@ -1,16 +1,23 @@
 name: Web CI
 
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: web-ci-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
-  static-check:
+  quality-gate:
+    name: Quality Gate
     runs-on: ubuntu-latest
 
     steps:
@@ -22,17 +29,24 @@ jobs:
         with:
           node-version: 20
 
-      - name: Validate source files
+      - name: Validate core files
         run: |
           test -f index.html
           test -f styles.css
           test -f script.js
+          test -f .github/scripts/check-static-site.mjs
+          test -f .github/scripts/scan-secrets.mjs
           grep -q "안녕하세요! 반가워요!" script.js
-          grep -q "helloButton" index.html
 
-      - name: Headless smoke check
+      - name: JS syntax check
         run: |
-          node -e "const fs=require('fs');const html=fs.readFileSync('index.html','utf8');if(!html.includes('styles.css')||!html.includes('script.js')){throw new Error('index.html missing css/js link');}console.log('smoke ok');"
+          node --check script.js
+          node --check .github/scripts/check-static-site.mjs
+          node --check .github/scripts/review-fallback.mjs
+          node --check .github/scripts/scan-secrets.mjs
+
+      - name: Static site validation
+        run: node .github/scripts/check-static-site.mjs
 
       - name: Upload web artifact
         uses: actions/upload-artifact@v4
@@ -42,3 +56,42 @@ jobs:
             index.html
             styles.css
             script.js
+
+  secret-scan:
+    name: Secret Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Scan for leaked secrets
+        run: node .github/scripts/scan-secrets.mjs --history 80
+
+  dependency-review:
+    name: Dependency Review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check dependency graph status
+        id: dep_graph
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          status=$(gh api "repos/${{ github.repository }}" --jq '.security_and_analysis.dependency_graph.status' 2>/dev/null || echo "unknown")
+          if [ -z "$status" ] || [ "$status" = "null" ]; then
+            status="unknown"
+          fi
+          echo "status=${status}" >> "$GITHUB_OUTPUT"
+          echo "Dependency graph status: ${status}"
+
+      - name: Dependency review
+        if: steps.dep_graph.outputs.status == 'enabled'
+        uses: actions/dependency-review-action@v4
+
+      - name: Skip notice
+        if: steps.dep_graph.outputs.status != 'enabled'
+        run: echo "Dependency Graph가 비활성이어서 Dependency Review를 건너뜁니다."
