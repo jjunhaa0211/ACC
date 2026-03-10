@@ -42,7 +42,7 @@ cat > /tmp/acc-branch-protection.json <<'JSON'
   "allow_force_pushes": false,
   "allow_deletions": false,
   "block_creations": false,
-  "required_conversation_resolution": true,
+  "required_conversation_resolution": false,
   "lock_branch": false,
   "allow_fork_syncing": true
 }
