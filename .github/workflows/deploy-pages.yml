@@ -29,7 +29,7 @@ jobs:
           cp index.html script.js dist/
 
       - name: Upload current artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v4
         with:
           path: dist
 
@@ -101,7 +101,7 @@ jobs:
           cp index.html script.js dist/
 
       - name: Upload rollback artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v4
         with:
           path: dist
 
