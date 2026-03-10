@@ -9,4 +9,6 @@
 - [ ] CI 확인 예정
 
 ## AI 리뷰 요청
-- PR 생성 후 코멘트에 `@gemini review`를 입력해 Gemini Code Assist 리뷰를 요청하세요.
+- PR 생성 후 코멘트에 아래를 입력해 AI 리뷰를 요청하세요.
+- `@gemini review`
+- `@coderabbitai review`

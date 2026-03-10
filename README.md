@@ -12,7 +12,7 @@
 ## CI/CD 상태
 ![Web CI](https://github.com/jjunhaa0211/ACC/actions/workflows/web-ci.yml/badge.svg)
 ![AI PR Review](https://github.com/jjunhaa0211/ACC/actions/workflows/ai-pr-review.yml/badge.svg)
-![Gemini Trigger](https://github.com/jjunhaa0211/ACC/actions/workflows/gemini-pr-review.yml/badge.svg)
+![AI App Trigger](https://github.com/jjunhaa0211/ACC/actions/workflows/gemini-pr-review.yml/badge.svg)
 ![Deploy Pages](https://github.com/jjunhaa0211/ACC/actions/workflows/deploy-pages.yml/badge.svg)
 ![CodeQL](https://github.com/jjunhaa0211/ACC/actions/workflows/codeql.yml/badge.svg)
 
@@ -27,9 +27,9 @@
    - PR diff 기반 fallback(규칙 기반) 리뷰 자동 코멘트
    - 비용 없이 기본 품질 피드백 제공
 
-3. `Gemini PR Review Trigger` (`.github/workflows/gemini-pr-review.yml`)
-   - PR 생성 시 `@gemini review` 요청 코멘트 자동 생성/갱신
-   - Gemini Code Assist가 설치되어 있으면 PR AI 리뷰 연동
+3. `AI App PR Review Trigger` (`.github/workflows/gemini-pr-review.yml`)
+   - PR 생성/업데이트 시 `@gemini review`, `@coderabbitai review` 요청 코멘트 자동 생성/갱신
+   - Gemini Code Assist / CodeRabbit 설치 시 PR AI 리뷰 연동
 
 4. `CodeQL` (`.github/workflows/codeql.yml`)
    - JavaScript 정적 보안 분석(SAST)
@@ -38,10 +38,13 @@
 5. `Deploy Pages` (`.github/workflows/deploy-pages.yml`)
    - `main` 푸시 시 GitHub Pages 자동 배포
 
-## Gemini PR 리뷰 설정
-1. GitHub Marketplace에서 `Gemini Code Assist` 설치
-2. 설치 대상에 `jjunhaa0211/ACC` 레포 선택
-3. PR에 자동 생성되는 `@gemini review` 코멘트 또는 수동 코멘트로 리뷰 요청
+## AI 앱 PR 리뷰 설정
+1. Gemini Code Assist 설치: `https://github.com/apps/gemini-code-assist`
+2. CodeRabbit 설치: `https://github.com/apps/coderabbitai`
+3. 두 앱 모두 설치 대상에 `jjunhaa0211/ACC` 레포 선택
+4. PR에 자동 생성되는 코멘트(또는 수동 코멘트)로 리뷰 요청
+   - `@gemini review`
+   - `@coderabbitai review`
 
 ## 배포
 - GitHub Pages: `https://jjunhaa0211.github.io/ACC/`

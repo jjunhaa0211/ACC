@@ -1,4 +1,4 @@
-name: Gemini PR Review Trigger
+name: AI App PR Review Trigger
 
 on:
   pull_request:
@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       pr_number:
-        description: "Gemini 리뷰를 요청할 PR 번호"
+        description: "AI 앱 리뷰를 요청할 PR 번호"
         required: true
 
 permissions:
@@ -15,7 +15,7 @@ permissions:
   pull-requests: write
 
 jobs:
-  request-gemini-review:
+  request-ai-app-review:
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
 
@@ -40,9 +40,10 @@ jobs:
       - name: Build request comment
         run: |
           {
-            echo "## 🔍 Gemini 리뷰 요청"
+            echo "## 🔍 AI 앱 리뷰 요청"
             echo
             echo "@gemini review"
+            echo "@coderabbitai review"
             echo
             echo "중점 검토 항목:"
             echo "- 보안 취약점/민감정보 노출 가능성"
@@ -50,20 +51,20 @@ jobs:
             echo "- 유지보수성/구조 개선 포인트"
             echo
             echo "_이 코멘트는 GitHub Actions가 자동 생성했습니다._"
-          } > gemini-review-request.md
+          } > ai-app-review-request.md
 
-      - name: Find existing Gemini request comment
+      - name: Find existing AI app request comment
         id: find_comment
         uses: peter-evans/find-comment@v3
         with:
           issue-number: ${{ steps.pr.outputs.pr_number }}
           comment-author: github-actions[bot]
-          body-includes: "## 🔍 Gemini 리뷰 요청"
+          body-includes: "## 🔍 AI 앱 리뷰 요청"
 
-      - name: Create or update Gemini request comment
+      - name: Create or update AI app request comment
         uses: peter-evans/create-or-update-comment@v4
         with:
           issue-number: ${{ steps.pr.outputs.pr_number }}
           comment-id: ${{ steps.find_comment.outputs.comment-id }}
-          body-path: gemini-review-request.md
+          body-path: ai-app-review-request.md
           edit-mode: replace
