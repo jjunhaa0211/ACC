@@ -1,6 +1,8 @@
 const app = document.getElementById("app");
 const emojiLayer = document.getElementById("emojiLayer");
 const dropButton = document.getElementById("dropButton");
+const resetButton = document.getElementById("resetButton");
+const emojiCountInput = document.getElementById("emojiCount");
 const status = document.getElementById("status");
 const emojiTemplate = document.getElementById("emojiTemplate");
 
@@ -8,6 +10,8 @@ if (
   !(app instanceof HTMLElement) ||
   !(emojiLayer instanceof HTMLElement) ||
   !(dropButton instanceof HTMLButtonElement) ||
+  !(resetButton instanceof HTMLButtonElement) ||
+  !(emojiCountInput instanceof HTMLInputElement) ||
   !(status instanceof HTMLElement) ||
   !(emojiTemplate instanceof HTMLTemplateElement)
 ) {
@@ -19,12 +23,11 @@ const seed = Number.parseInt(query.get("seed") ?? "", 10);
 const isTestMode = query.get("test") === "1";
 
 const random = Number.isFinite(seed) ? createRng(seed) : Math.random;
-
-const EMOJI_POOL = ["😂", "🔥", "💥", "😎", "🤖", "🎯", "🪩", "🍀", "⚡", "🌊", "🎈", "🫧"];
+const emojiPattern = /\p{Extended_Pictographic}/u;
 
 const SETTINGS = {
-  burstCount: 42,
-  maxEmojis: 140,
+  defaultBurstCount: 120,
+  maxBurstCount: 800,
   gravity: 2400,
   airDrag: 0.992,
   wallBounce: 0.82,
@@ -44,8 +47,13 @@ let worldHeight = window.innerHeight;
 let lastFrameTime = performance.now();
 let accumulator = 0;
 let rafId = 0;
-
 let dragState = null;
+
+const emojiCatalog = buildEmojiCatalog();
+const availableSymbols = [];
+
+resetSymbolPool();
+emojiCountInput.value = String(SETTINGS.defaultBurstCount);
 
 function createRng(initialSeed) {
   let state = (initialSeed >>> 0) || 1;
@@ -68,6 +76,67 @@ function randomBetween(min, max) {
 
 function round(value) {
   return Math.round(value * 100) / 100;
+}
+
+function shuffleInPlace(list) {
+  for (let index = list.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(random() * (index + 1));
+    [list[index], list[swapIndex]] = [list[swapIndex], list[index]];
+  }
+
+  return list;
+}
+
+function buildEmojiCatalog() {
+  const ranges = [
+    [0x1f300, 0x1faff],
+    [0x2600, 0x27bf]
+  ];
+
+  const excluded = new Set([0x200d, 0xfe0f, 0x20e3]);
+  for (let code = 0x1f3fb; code <= 0x1f3ff; code += 1) {
+    excluded.add(code);
+  }
+
+  const unique = new Set();
+  for (const [start, end] of ranges) {
+    for (let code = start; code <= end; code += 1) {
+      if (excluded.has(code)) {
+        continue;
+      }
+
+      const symbol = String.fromCodePoint(code);
+      if (emojiPattern.test(symbol)) {
+        unique.add(symbol);
+      }
+    }
+  }
+
+  return [...unique];
+}
+
+function resetSymbolPool() {
+  availableSymbols.length = 0;
+  const shuffled = shuffleInPlace([...emojiCatalog]);
+  availableSymbols.push(...shuffled);
+}
+
+function resetAll() {
+  emojis.length = 0;
+  nextEmojiId = 1;
+  dragState = null;
+  emojiLayer.replaceChildren();
+  resetSymbolPool();
+  updateStatus("초기화 완료");
+}
+
+function getRequestedCount() {
+  const parsed = Number.parseInt(emojiCountInput.value ?? "", 10);
+  const fallback = Number.isFinite(parsed) ? parsed : SETTINGS.defaultBurstCount;
+  const count = clamp(Math.trunc(fallback), 1, SETTINGS.maxBurstCount);
+
+  emojiCountInput.value = String(count);
+  return count;
 }
 
 function getButtonRect() {
@@ -101,10 +170,9 @@ function makeEmojiElement(id, symbol) {
   return element;
 }
 
-function createEmoji() {
+function createEmoji(symbol) {
   const radius = randomBetween(18, 24);
   const id = nextEmojiId;
-  const symbol = EMOJI_POOL[Math.floor(randomBetween(0, EMOJI_POOL.length))];
 
   const emoji = {
     id,
@@ -125,29 +193,42 @@ function createEmoji() {
   emojis.push(emoji);
 }
 
-function trimExcessEmojis() {
-  while (emojis.length > SETTINGS.maxEmojis) {
-    const removed = emojis.shift();
-    removed?.element.remove();
+function spawnBurst(requestedCount = SETTINGS.defaultBurstCount) {
+  const count = clamp(Math.trunc(requestedCount), 1, SETTINGS.maxBurstCount);
+  const spawnable = Math.min(count, availableSymbols.length);
+  const startLength = emojis.length;
+
+  for (let index = 0; index < spawnable; index += 1) {
+    const symbol = availableSymbols.shift();
+    if (!symbol) {
+      break;
+    }
+    createEmoji(symbol);
   }
-}
 
-function spawnBurst(count = SETTINGS.burstCount) {
-  for (let index = 0; index < count; index += 1) {
-    createEmoji();
-  }
+  const created = emojis.length - startLength;
 
-  trimExcessEmojis();
-  updateStatus();
-}
-
-function updateStatus() {
-  if (emojis.length === 0) {
-    status.textContent = "버튼을 누른 뒤 이모지를 잡아서 던져보세요";
+  if (created === count) {
+    updateStatus();
     return;
   }
 
-  status.textContent = `현재 ${emojis.length}개의 이모지가 튕기고 있어요`;
+  if (created === 0) {
+    updateStatus("고유 이모지가 모두 소진되었습니다. 초기화를 눌러 다시 시작하세요");
+    return;
+  }
+
+  updateStatus(`요청 ${count}개 중 ${created}개만 생성됨(중복 방지)`);
+}
+
+function updateStatus(extraMessage = "") {
+  if (emojis.length === 0) {
+    status.textContent = `개수를 입력하고 떨어뜨리기를 누르세요 · 남은 고유 이모지 ${availableSymbols.length}개`;
+    return;
+  }
+
+  const base = `현재 ${emojis.length}개 · 남은 고유 이모지 ${availableSymbols.length}개`;
+  status.textContent = extraMessage ? `${base} · ${extraMessage}` : base;
 }
 
 function resolveViewportCollision(emoji) {
@@ -496,12 +577,20 @@ function getState() {
 
 window.__emojiLab = {
   spawnBurst,
+  resetAll,
   runFrames,
-  getState
+  getState,
+  getRemainingUniqueCount: () => availableSymbols.length,
+  getCatalogSize: () => emojiCatalog.length
 };
 
 dropButton.addEventListener("click", () => {
-  spawnBurst();
+  const count = getRequestedCount();
+  spawnBurst(count);
+});
+
+resetButton.addEventListener("click", () => {
+  resetAll();
 });
 
 window.addEventListener("resize", onResize);
