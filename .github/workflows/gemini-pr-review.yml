@@ -1,0 +1,69 @@
+name: Gemini PR Review Trigger
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "Gemini 리뷰를 요청할 PR 번호"
+        required: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  request-gemini-review:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Resolve PR number
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "pr_number=${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+          else
+            pr_number="${{ github.event.inputs.pr_number }}"
+            if [ -z "$pr_number" ]; then
+              echo "pr_number 입력이 필요합니다."
+              exit 1
+            fi
+            gh api "repos/${{ github.repository }}/pulls/${pr_number}" >/dev/null
+            echo "pr_number=${pr_number}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build request comment
+        run: |
+          {
+            echo "## 🔍 Gemini 리뷰 요청"
+            echo
+            echo "@gemini review"
+            echo
+            echo "중점 검토 항목:"
+            echo "- 보안 취약점/민감정보 노출 가능성"
+            echo "- 기능 회귀 및 런타임 오류 가능성"
+            echo "- 유지보수성/구조 개선 포인트"
+            echo
+            echo "_이 코멘트는 GitHub Actions가 자동 생성했습니다._"
+          } > gemini-review-request.md
+
+      - name: Find existing Gemini request comment
+        id: find_comment
+        uses: peter-evans/find-comment@v3
+        with:
+          issue-number: ${{ steps.pr.outputs.pr_number }}
+          comment-author: github-actions[bot]
+          body-includes: "## 🔍 Gemini 리뷰 요청"
+
+      - name: Create or update Gemini request comment
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          issue-number: ${{ steps.pr.outputs.pr_number }}
+          comment-id: ${{ steps.find_comment.outputs.comment-id }}
+          body-path: gemini-review-request.md
+          edit-mode: replace
