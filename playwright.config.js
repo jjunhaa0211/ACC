@@ -4,6 +4,7 @@ module.exports = defineConfig({
   testDir: "./tests/e2e",
   timeout: 30_000,
   retries: 1,
+  snapshotPathTemplate: "{testDir}/{testFilePath}-snapshots/{arg}{ext}",
   use: {
     baseURL: "http://127.0.0.1:4173"
   },

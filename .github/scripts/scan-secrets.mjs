@@ -58,6 +58,9 @@ function scanContent(content, source, findings) {
 function scanWorkingTree() {
   const findings = [];
   for (const file of trackedFiles()) {
+    if (!fs.existsSync(file)) {
+      continue;
+    }
     const buffer = fs.readFileSync(file);
     const text = buffer.toString("utf8");
     scanContent(text, file, findings);

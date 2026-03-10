@@ -33,15 +33,15 @@ jobs:
       - name: Validate core files
         run: |
           test -f index.html
-          test -f styles.css
           test -f script.js
+          test -f eslint.config.js
           test -f .github/scripts/check-static-site.mjs
           test -f .github/scripts/scan-secrets.mjs
-          grep -q "안녕하세요! 반가워요!" script.js
 
       - name: JS syntax check
         run: |
           node --check script.js
+          node --check eslint.config.js
           node --check .github/scripts/check-static-site.mjs
           node --check .github/scripts/review-fallback.mjs
           node --check .github/scripts/scan-secrets.mjs
@@ -52,13 +52,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Run lint
+        run: npm run lint
+
       - name: Upload web artifact
         uses: actions/upload-artifact@v4
         with:
           name: acc-static-web
           path: |
             index.html
-            styles.css
             script.js
 
   secret-scan:

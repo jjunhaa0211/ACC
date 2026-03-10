@@ -38,7 +38,7 @@ jobs:
       - name: Prepare deploy bundle
         run: |
           mkdir -p dist
-          cp index.html styles.css script.js dist/
+          cp index.html script.js dist/
 
       - name: Setup Node
         uses: actions/setup-node@v4

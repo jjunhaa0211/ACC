@@ -1,6 +1,6 @@
 import fs from "node:fs";
 
-const requiredFiles = ["index.html", "styles.css", "script.js"];
+const requiredFiles = ["index.html", "script.js"];
 const errors = [];
 
 for (const file of requiredFiles) {
@@ -14,7 +14,6 @@ if (errors.length > 0) {
 }
 
 const html = fs.readFileSync("index.html", "utf8");
-const css = fs.readFileSync("styles.css", "utf8");
 const js = fs.readFileSync("script.js", "utf8");
 
 const checks = [
@@ -23,32 +22,40 @@ const checks = [
     fail: "index.html의 `<html>`에 `lang=\"ko\"`가 필요합니다."
   },
   {
-    ok: html.includes('id="helloButton"'),
-    fail: "index.html에 `id=\"helloButton\"` 버튼이 필요합니다."
+    ok: html.includes("cdn.tailwindcss.com"),
+    fail: "index.html에 Tailwind CDN 로드가 필요합니다."
   },
   {
-    ok: html.includes('id="message"') && html.includes('aria-live="polite"'),
-    fail: "메시지 영역에 `aria-live=\"polite\"`가 필요합니다."
+    ok: html.includes('id="dropButton"'),
+    fail: "index.html에 `id=\"dropButton\"` 버튼이 필요합니다."
   },
   {
-    ok: html.includes('href="styles.css"'),
-    fail: "index.html이 styles.css를 로드해야 합니다."
+    ok: html.includes('id="emojiLayer"'),
+    fail: "index.html에 `id=\"emojiLayer\"` 영역이 필요합니다."
+  },
+  {
+    ok: html.includes('id="emojiTemplate"'),
+    fail: "index.html에 `id=\"emojiTemplate\"` 템플릿이 필요합니다."
+  },
+  {
+    ok: html.includes('id="status"') && html.includes('aria-live="polite"'),
+    fail: "status 영역에 `aria-live=\"polite\"`가 필요합니다."
   },
   {
     ok: html.includes('src="script.js"'),
     fail: "index.html이 script.js를 로드해야 합니다."
   },
   {
-    ok: css.includes(":root") && css.includes("--bg-1") && css.includes("--hot"),
-    fail: "styles.css에 기본 테마 변수(:root)가 필요합니다."
+    ok: js.includes("spawnBurst") && js.includes("window.__emojiLab"),
+    fail: "script.js에 이모지 생성/테스트 API가 필요합니다."
   },
   {
-    ok: js.includes("안녕하세요! 반가워요!"),
-    fail: "script.js에 인사 메시지 텍스트가 필요합니다."
+    ok: js.includes("pointerdown") && js.includes("pointermove") && js.includes("pointerup"),
+    fail: "script.js에 드래그/던지기 포인터 이벤트 처리가 필요합니다."
   },
   {
-    ok: js.includes("helloButton") && js.includes("addEventListener"),
-    fail: "script.js에 버튼 이벤트 핸들러가 필요합니다."
+    ok: js.includes("resolveViewportCollision") && js.includes("resolveRectCollision"),
+    fail: "script.js에 화면 경계/버튼 충돌 처리 로직이 필요합니다."
   }
 ];
 
