@@ -1,0 +1,119 @@
+name: AI Review Policy
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
+  pull_request_review:
+    types: [submitted, edited, dismissed]
+  issue_comment:
+    types: [created, edited]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  label-from-ai-comments:
+    name: Detect AI Findings Label
+    runs-on: ubuntu-latest
+    if: github.event_name == 'issue_comment' || github.event_name == 'pull_request'
+
+    steps:
+      - name: Resolve PR number
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "number=${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+          else
+            if [ -z "${{ github.event.issue.pull_request.url }}" ]; then
+              echo "PR 코멘트 이벤트가 아니라서 종료"
+              echo "number=" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "number=${{ github.event.issue.number }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Scan AI comments for blocker keywords
+        if: steps.pr.outputs.number != ''
+        id: scan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          comments=$(gh api "repos/${{ github.repository }}/issues/${{ steps.pr.outputs.number }}/comments")
+          hits=$(echo "$comments" | jq -r '
+            .[]
+            | select(.user.login | test("coderabbit|gemini|code-assist"; "i"))
+            | select(.body | test("security|vulnerab|취약|보안|regression|회귀|breaking|critical|high severity"; "i"))
+            | .id
+          ' | wc -l | tr -d ' ')
+
+          if [ "$hits" -gt 0 ]; then
+            echo "needs_block=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "needs_block=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Add blocker label
+        if: steps.pr.outputs.number != '' && steps.scan.outputs.needs_block == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr edit "${{ steps.pr.outputs.number }}" --repo "${{ github.repository }}" --add-label ai-security-blocker || true
+
+      - name: Remove blocker label when cleared
+        if: steps.pr.outputs.number != '' && steps.scan.outputs.needs_block == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr edit "${{ steps.pr.outputs.number }}" --repo "${{ github.repository }}" --remove-label ai-security-blocker || true
+
+  policy-gate:
+    name: AI Review Policy
+    runs-on: ubuntu-latest
+    if: (github.event_name == 'pull_request' || github.event_name == 'pull_request_review') && github.event.pull_request.draft == false
+
+    steps:
+      - name: Enforce human approval on AI security/regression blockers
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          labels=$(gh pr view "${{ github.event.pull_request.number }}" --repo "${{ github.repository }}" --json labels --jq '.labels[].name')
+          has_blocker=false
+
+          if echo "$labels" | grep -qx "ai-security-blocker"; then
+            has_blocker=true
+          fi
+
+          if [ "$has_blocker" = true ]; then
+            approvals=$(
+              gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/reviews" --jq '
+                reduce .[] as $review (
+                  {};
+                  .[$review.user.login] = {
+                    state: $review.state,
+                    user_type: $review.user.type
+                  }
+                )
+                | to_entries
+                | [ .[]
+                    | select(.value.state == "APPROVED")
+                    | select(.value.user_type != "Bot")
+                  ]
+                | length
+              '
+            )
+
+            if [ "${approvals}" -lt 1 ]; then
+              echo "AI 리뷰에서 보안/회귀 이슈가 감지되었습니다."
+              echo "사람 리뷰어의 APPROVED 상태가 최소 1건 필요합니다."
+              exit 1
+            fi
+
+            echo "Blocker detected, human approval count: ${approvals}"
+          fi
+
+          echo "AI review policy check passed."

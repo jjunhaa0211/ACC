@@ -1,35 +1,35 @@
 # ACC
 
-재밌는 버튼 UI + PR AI 리뷰 CI를 테스트하는 저장소입니다.
+검은 배경 캔버스에서 중앙 버튼을 누르면 이모지가 떨어지고, 서로/벽/버튼 상단과 충돌하며 튕기는 인터랙티브 데모입니다.
 
-## 웹 기능
-- 버튼 클릭 시 `안녕하세요! 반가워요!` 메시지가 애니메이션과 함께 표시됩니다.
-- 정적 페이지 파일:
-  - `index.html`
-  - `styles.css`
-  - `script.js`
-
-## CI 구성
-![Web CI](https://github.com/jjunhaa0211/ACC/actions/workflows/web-ci.yml/badge.svg)
-![AI PR Review](https://github.com/jjunhaa0211/ACC/actions/workflows/ai-pr-review.yml/badge.svg)
-
-1. `Web CI` (`.github/workflows/web-ci.yml`)
-   - 파일 존재/키워드 체크
-   - HTML에 CSS/JS 연결 여부 스모크 체크
-   - 정적 웹 파일 아티팩트 업로드
-
-2. `AI PR Review` (`.github/workflows/ai-pr-review.yml`)
-   - Pull Request 발생 시 변경 diff 생성
-   - ChatGPT(OpenAI) + Gemini로 PR 리뷰
-   - 결과를 PR 코멘트로 자동 갱신
-
-## GitHub Secrets 설정
-레포 `Settings > Secrets and variables > Actions`에 아래 키를 추가하세요.
-
-- `OPENAI_API_KEY`
-- `GEMINI_API_KEY`
-
-키가 없으면 워크플로는 실패하지 않고 "리뷰 스킵" 메시지를 남깁니다.
+## 주요 기능
+- 중앙 버튼 클릭 시 이모지 대량 드롭
+- 이모지 간 충돌, 중력, 반발, 감쇠 적용
+- 화면 경계 밖으로 이탈 방지
+- 버튼 상단을 보조 바닥처럼 처리해 충돌 반발
+- 이모지 드래그 후 던지기(throw) 지원
+- Tailwind 기반 단일 페이지(`index.html` + `script.js`)
 
 ## 로컬 실행
-브라우저에서 `index.html`을 열면 바로 확인할 수 있습니다.
+```bash
+npm install
+npm run serve:ci
+```
+브라우저에서 `http://127.0.0.1:4173` 접속
+
+## 품질 체크
+```bash
+npm run lint
+npm run test:e2e:ci
+npm run test:lighthouse
+```
+
+## 테스트 구성
+- E2E: `tests/e2e/emoji-physics.spec.js`
+- 스냅샷: deterministic 모드(`?seed=...&test=1`)에서 물리 상태 JSON 스냅샷 검증
+
+## CI/CD
+- Web CI: 정적 검증 + 린트 + 시크릿 스캔 + E2E + Lighthouse
+- AI PR Review / AI Review Policy / CodeQL
+- PR Preview(Netlify), SBOM(CycloneDX)
+- Pages 배포 후 헬스체크, 실패 시 롤백 시도

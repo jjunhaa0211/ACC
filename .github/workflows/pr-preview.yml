@@ -1,0 +1,130 @@
+name: PR Preview Deploy
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "수동 배포할 PR 번호"
+        required: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  netlify-preview:
+    name: Netlify Preview
+    runs-on: ubuntu-latest
+    if: secrets.NETLIFY_AUTH_TOKEN != '' && secrets.NETLIFY_SITE_ID != ''
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve PR number
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "number=${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "number=${{ github.event.inputs.pr_number }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Prepare deploy bundle
+        run: |
+          mkdir -p dist
+          cp index.html script.js dist/
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Netlify CLI
+        run: npm i -g netlify-cli
+
+      - name: Deploy preview to Netlify
+        id: deploy
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+        run: |
+          netlify deploy \
+            --dir=dist \
+            --site="${NETLIFY_SITE_ID}" \
+            --auth="${NETLIFY_AUTH_TOKEN}" \
+            --json > netlify-deploy.json
+          preview_url=$(jq -r '.deploy_url' netlify-deploy.json)
+          if [ -z "$preview_url" ] || [ "$preview_url" = "null" ]; then
+            echo "Netlify preview URL 파싱 실패"
+            cat netlify-deploy.json
+            exit 1
+          fi
+          echo "preview_url=${preview_url}" >> "$GITHUB_OUTPUT"
+
+      - name: Find existing preview comment
+        id: find_comment
+        uses: peter-evans/find-comment@v3
+        with:
+          issue-number: ${{ steps.pr.outputs.number }}
+          comment-author: github-actions[bot]
+          body-includes: "## 🚀 PR Preview"
+
+      - name: Create or update preview comment
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          issue-number: ${{ steps.pr.outputs.number }}
+          comment-id: ${{ steps.find_comment.outputs.comment-id }}
+          edit-mode: replace
+          body: |
+            ## 🚀 PR Preview
+
+            - Netlify Preview URL: ${{ steps.deploy.outputs.preview_url }}
+            - 상태: 배포 완료
+
+            _자동 생성 코멘트입니다._
+
+  preview-secrets-missing:
+    name: Preview Config Notice
+    runs-on: ubuntu-latest
+    if: secrets.NETLIFY_AUTH_TOKEN == '' || secrets.NETLIFY_SITE_ID == ''
+
+    steps:
+      - name: Resolve PR number
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "number=${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "number=${{ github.event.inputs.pr_number }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Find existing notice comment
+        id: find_comment
+        uses: peter-evans/find-comment@v3
+        with:
+          issue-number: ${{ steps.pr.outputs.number }}
+          comment-author: github-actions[bot]
+          body-includes: "## 🚀 PR Preview 설정 필요"
+
+      - name: Create or update notice comment
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          issue-number: ${{ steps.pr.outputs.number }}
+          comment-id: ${{ steps.find_comment.outputs.comment-id }}
+          edit-mode: replace
+          body: |
+            ## 🚀 PR Preview 설정 필요
+
+            PR 프리뷰 배포를 위해 아래 시크릿이 필요합니다.
+            - `NETLIFY_AUTH_TOKEN`
+            - `NETLIFY_SITE_ID`
+
+            _자동 생성 코멘트입니다._

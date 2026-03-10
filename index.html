@@ -1,26 +1,60 @@
 <!doctype html>
-<html lang="ko">
+<html lang="ko" class="h-full">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ACC Greeting Lab</title>
+    <title>ACC Emoji Drop Lab</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Do+Hyeon&family=Gaegu:wght@400;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="styles.css" />
+    <script>
+      window.tailwind = {
+        config: {
+          theme: {
+            extend: {
+              fontFamily: {
+                display: ["Space Grotesk", "sans-serif"]
+              }
+            }
+          }
+        }
+      };
+    </script>
+    <script src="https://cdn.tailwindcss.com"></script>
   </head>
-  <body>
-    <div class="shape shape-a" aria-hidden="true"></div>
-    <div class="shape shape-b" aria-hidden="true"></div>
-    <main class="stage">
-      <p class="kicker">ACC · Fun Greeting Web</p>
-      <h1>버튼을 누르면 기분 좋은 인사가 터집니다</h1>
-      <button id="helloButton" class="hello-button" type="button">인사 받기</button>
-      <p id="message" class="message" aria-live="polite"></p>
-      <div id="sparkles" class="sparkles" aria-hidden="true"></div>
+  <body class="h-full overflow-hidden bg-black text-zinc-100 font-display">
+    <main id="app" class="relative h-screen w-screen overflow-hidden select-none touch-none">
+      <div id="emojiLayer" class="absolute inset-0 z-20" aria-hidden="true"></div>
+      <template id="emojiTemplate">
+        <span
+          class="absolute box-border grid place-items-center rounded-full border border-white/10 bg-zinc-900/80 text-2xl shadow-[0_10px_26px_rgba(0,0,0,0.45)] backdrop-blur-sm"
+        ></span>
+      </template>
+
+      <div class="pointer-events-none absolute inset-x-0 top-6 z-30 px-4 text-center">
+        <p class="mx-auto w-fit rounded-full border border-zinc-800 bg-zinc-950/80 px-4 py-1 text-xs tracking-[0.24em] text-zinc-400 sm:text-sm">
+          EMOJI PHYSICS LAB
+        </p>
+      </div>
+
+      <button
+        id="dropButton"
+        type="button"
+        class="absolute left-1/2 top-1/2 z-40 -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-zinc-700 bg-zinc-900/90 px-8 py-4 text-lg font-semibold tracking-wide text-zinc-100 shadow-[0_18px_44px_rgba(0,0,0,0.45)] transition hover:-translate-y-[52%] hover:border-cyan-400 hover:bg-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 active:translate-y-[-49%]"
+      >
+        이모지 폭포 시작
+      </button>
+
+      <p
+        id="status"
+        aria-live="polite"
+        class="pointer-events-none absolute left-1/2 top-[calc(50%+4.25rem)] z-30 -translate-x-1/2 rounded-full border border-zinc-800 bg-zinc-950/70 px-4 py-1 text-xs text-zinc-300 sm:text-sm"
+      >
+        버튼을 누른 뒤 이모지를 잡아서 던져보세요
+      </p>
     </main>
 
     <script src="script.js"></script>

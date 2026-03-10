@@ -11,6 +11,7 @@ permissions:
 
 jobs:
   ai-review:
+    name: AI PR Review
     if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
 
@@ -27,31 +28,29 @@ jobs:
 
       - name: Build PR diff
         id: diff
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
-          git fetch origin "${{ github.base_ref }}" --depth=1
-          git diff --unified=0 "origin/${{ github.base_ref }}"..."${{ github.sha }}" > pr.diff
+          curl -sSf \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H "Accept: application/vnd.github.v3.diff" \
+            "${{ github.api_url }}/repos/${{ github.repository }}/compare/${{ github.event.pull_request.base.ref }}...${{ github.event.pull_request.head.sha }}" \
+            > pr.diff
           echo "diff_path=pr.diff" >> "$GITHUB_OUTPUT"
 
-      - name: Review with OpenAI (ChatGPT)
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: node .github/scripts/review-openai.mjs "${{ steps.diff.outputs.diff_path }}" > openai-review.md
-
-      - name: Review with Gemini
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        run: node .github/scripts/review-gemini.mjs "${{ steps.diff.outputs.diff_path }}" > gemini-review.md
+      - name: Review with Fallback
+        run: node .github/scripts/review-fallback.mjs "${{ steps.diff.outputs.diff_path }}" > fallback-review.md
 
       - name: Compose PR comment
         run: |
           {
             echo "## 🤖 AI CI 리뷰 결과"
             echo
-            echo "### ChatGPT (OpenAI)"
-            cat openai-review.md
+            echo "- 실행 모드: 자동 PR(Fallback only)"
+            echo "- 상세 AI 리뷰는 GitHub App에서 \`/gemini review\`, \`@coderabbitai review\`로 요청하세요."
             echo
-            echo "### Gemini"
-            cat gemini-review.md
+            echo "### Fallback (Rule-based)"
+            cat fallback-review.md
             echo
             echo "---"
             echo "_자동 생성 코멘트입니다. 필요 시 사람이 최종 확인하세요._"
