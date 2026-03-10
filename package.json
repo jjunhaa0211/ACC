@@ -12,7 +12,7 @@
     "test:lighthouse": "lhci autorun --config=.lighthouserc.json"
   },
   "devDependencies": {
-    "@eslint/js": "^9.22.0",
+    "@eslint/js": "^10.0.1",
     "@cyclonedx/cyclonedx-npm": "^4.0.3",
     "@lhci/cli": "^0.15.1",
     "@playwright/test": "^1.55.0",
