@@ -65,7 +65,7 @@ jobs:
           body-includes: "## 🤖 AI CI 리뷰 결과"
 
       - name: Create or update AI comment
-        uses: peter-evans/create-or-update-comment@v4
+        uses: peter-evans/create-or-update-comment@v5
         with:
           issue-number: ${{ github.event.pull_request.number }}
           comment-id: ${{ steps.find_comment.outputs.comment-id }}
