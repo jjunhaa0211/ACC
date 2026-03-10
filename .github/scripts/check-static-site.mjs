@@ -33,6 +33,14 @@ const checks = [
     fail: "index.html에 `id=\"dropButton\"` 버튼이 필요합니다."
   },
   {
+    ok: html.includes('id="resetButton"'),
+    fail: "index.html에 `id=\"resetButton\"` 버튼이 필요합니다."
+  },
+  {
+    ok: html.includes('id="emojiCount"') && /type=["']number["']/i.test(html),
+    fail: "index.html에 `id=\"emojiCount\"` 숫자 입력이 필요합니다."
+  },
+  {
     ok: html.includes('id="emojiLayer"'),
     fail: "index.html에 `id=\"emojiLayer\"` 영역이 필요합니다."
   },
@@ -49,7 +57,7 @@ const checks = [
     fail: "index.html이 script.js를 로드해야 합니다."
   },
   {
-    ok: js.includes("spawnBurst") && js.includes("window.__emojiLab"),
+    ok: js.includes("spawnBurst") && js.includes("resetAll") && js.includes("window.__emojiLab"),
     fail: "script.js에 이모지 생성/테스트 API가 필요합니다."
   },
   {
@@ -59,6 +67,10 @@ const checks = [
   {
     ok: js.includes("resolveViewportCollision") && js.includes("resolveRectCollision"),
     fail: "script.js에 화면 경계/버튼 충돌 처리 로직이 필요합니다."
+  },
+  {
+    ok: js.includes("getRequestedCount") && js.includes("getRemainingUniqueCount"),
+    fail: "script.js에 사용자 개수 입력/고유 이모지 관리 로직이 필요합니다."
   }
 ];
 
