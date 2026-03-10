@@ -40,12 +40,34 @@
         </p>
       </div>
 
+      <section
+        class="absolute left-1/2 top-20 z-40 flex w-[min(96vw,560px)] -translate-x-1/2 flex-wrap items-center justify-center gap-2 rounded-2xl border border-zinc-800 bg-zinc-950/85 px-3 py-3 backdrop-blur-sm"
+      >
+        <label for="emojiCount" class="text-xs text-zinc-400 sm:text-sm">드롭 개수</label>
+        <input
+          id="emojiCount"
+          type="number"
+          inputmode="numeric"
+          min="1"
+          max="800"
+          value="120"
+          class="w-24 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-center text-sm text-zinc-100 outline-none ring-cyan-400 transition focus:ring-2"
+        />
+        <button
+          id="resetButton"
+          type="button"
+          class="rounded-xl border border-rose-900/80 bg-rose-950/70 px-4 py-2 text-sm font-semibold tracking-wide text-rose-100 transition hover:border-rose-500 hover:bg-rose-900/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400 active:scale-[0.98]"
+        >
+          초기화
+        </button>
+      </section>
+
       <button
         id="dropButton"
         type="button"
         class="absolute left-1/2 top-1/2 z-40 -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-zinc-700 bg-zinc-900/90 px-8 py-4 text-lg font-semibold tracking-wide text-zinc-100 shadow-[0_18px_44px_rgba(0,0,0,0.45)] transition hover:-translate-y-[52%] hover:border-cyan-400 hover:bg-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 active:translate-y-[-49%]"
       >
-        이모지 폭포 시작
+        이모지 떨어뜨리기
       </button>
 
       <p
