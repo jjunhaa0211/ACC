@@ -28,7 +28,7 @@
    - 비용 없이 기본 품질 피드백 제공
 
 3. `AI App PR Review Trigger` (`.github/workflows/gemini-pr-review.yml`)
-   - PR 생성/업데이트 시 `@gemini review`, `@coderabbitai review` 요청 코멘트 자동 생성/갱신
+   - PR 생성/업데이트 시 `/gemini review`, `@coderabbitai review` 요청 코멘트 자동 생성/갱신
    - Gemini Code Assist / CodeRabbit 설치 시 PR AI 리뷰 연동
 
 4. `CodeQL` (`.github/workflows/codeql.yml`)
@@ -43,7 +43,7 @@
 2. CodeRabbit 설치: `https://github.com/apps/coderabbitai`
 3. 두 앱 모두 설치 대상에 `jjunhaa0211/ACC` 레포 선택
 4. PR에 자동 생성되는 코멘트(또는 수동 코멘트)로 리뷰 요청
-   - `@gemini review`
+   - `/gemini review`
    - `@coderabbitai review`
 
 ## 배포

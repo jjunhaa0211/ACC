@@ -42,7 +42,7 @@ jobs:
           {
             echo "## 🔍 AI 앱 리뷰 요청"
             echo
-            echo "@gemini review"
+            echo "/gemini review"
             echo "@coderabbitai review"
             echo
             echo "중점 검토 항목:"
