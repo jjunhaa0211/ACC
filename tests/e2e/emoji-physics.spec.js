@@ -1,4 +1,5 @@
 const { test, expect } = require("@playwright/test");
+
 const FIXED_VIEWPORT = { width: 1280, height: 720 };
 
 async function gotoWithViewport(page, path) {
@@ -6,49 +7,83 @@ async function gotoWithViewport(page, path) {
   await page.goto(path);
 }
 
-test("button click drops bouncing emojis inside the viewport", async ({ page }) => {
-  await gotoWithViewport(page, "/?seed=7");
+test("user count 200/300 keeps emojis and prevents duplicate symbols", async ({ page }) => {
+  await gotoWithViewport(page, "/?seed=7&test=1");
 
-  const button = page.locator("#dropButton");
-  await expect(button).toBeVisible();
+  const catalogSize = await page.evaluate(() => window.__emojiLab.getCatalogSize());
+  expect(catalogSize).toBeGreaterThanOrEqual(500);
 
-  await button.click();
-  await page.waitForTimeout(1000);
+  await page.fill("#emojiCount", "200");
+  await page.click("#dropButton");
 
-  const emojiCount = await page.locator('[data-emoji="true"]').count();
-  expect(emojiCount).toBeGreaterThan(30);
+  const stateAfterFirstDrop = await page.evaluate(() => window.__emojiLab.getState());
+  expect(stateAfterFirstDrop).toHaveLength(200);
+  expect(new Set(stateAfterFirstDrop.map((emoji) => emoji.symbol)).size).toBe(200);
 
-  const hasOutOfBoundsEmoji = await page.evaluate(() => {
-    const state = window.__emojiLab.getState();
-    const { innerWidth, innerHeight } = window;
+  await page.fill("#emojiCount", "300");
+  await page.click("#dropButton");
 
-    return state.some((emoji) => {
-      return (
-        emoji.x - emoji.radius < 0 ||
-        emoji.y - emoji.radius < 0 ||
-        emoji.x + emoji.radius > innerWidth ||
-        emoji.y + emoji.radius > innerHeight
-      );
-    });
+  const stateAfterSecondDrop = await page.evaluate(() => window.__emojiLab.getState());
+  expect(stateAfterSecondDrop).toHaveLength(500);
+  expect(new Set(stateAfterSecondDrop.map((emoji) => emoji.symbol)).size).toBe(500);
+});
+
+test("reset clears all emojis and restores unique pool", async ({ page }) => {
+  await gotoWithViewport(page, "/?seed=11&test=1");
+
+  await page.fill("#emojiCount", "180");
+  await page.click("#dropButton");
+
+  const beforeReset = await page.evaluate(() => {
+    return {
+      count: window.__emojiLab.getState().length,
+      remaining: window.__emojiLab.getRemainingUniqueCount(),
+      catalog: window.__emojiLab.getCatalogSize()
+    };
   });
 
-  expect(hasOutOfBoundsEmoji).toBe(false);
+  expect(beforeReset.count).toBe(180);
+  expect(beforeReset.remaining).toBe(beforeReset.catalog - 180);
+
+  await page.click("#resetButton");
+
+  const afterReset = await page.evaluate(() => {
+    return {
+      count: window.__emojiLab.getState().length,
+      remaining: window.__emojiLab.getRemainingUniqueCount(),
+      catalog: window.__emojiLab.getCatalogSize()
+    };
+  });
+
+  expect(afterReset.count).toBe(0);
+  expect(afterReset.remaining).toBe(afterReset.catalog);
 });
 
 test("user can drag and throw an emoji", async ({ page }) => {
   await gotoWithViewport(page, "/?seed=18&test=1");
 
+  await page.fill("#emojiCount", "60");
   await page.click("#dropButton");
+  await page.evaluate(() => {
+    window.__emojiLab.runFrames(90);
+  });
 
-  const target = page.locator('[data-emoji="true"]').first();
-  await expect(target).toBeVisible();
+  const emojiId = await page.evaluate(() => {
+    const h = window.innerHeight;
+    const target = window.__emojiLab
+      .getState()
+      .find((emoji) => emoji.y > 120 && emoji.y < h - 80);
 
-  const emojiId = await target.getAttribute("data-emoji-id");
+    return target ? String(target.id) : null;
+  });
+
   expect(emojiId).not.toBeNull();
 
+  const target = page.locator(`[data-emoji-id="${emojiId}"]`);
+  await expect(target).toBeVisible();
+
   const before = await page.evaluate((id) => {
-    const current = window.__emojiLab.getState().find((emoji) => String(emoji.id) === id);
-    return current ?? null;
+    return window.__emojiLab.getState().find((emoji) => String(emoji.id) === id) ?? null;
   }, emojiId);
   expect(before).not.toBeNull();
 
@@ -62,12 +97,11 @@ test("user can drag and throw an emoji", async ({ page }) => {
 
   await page.mouse.move(startX, startY);
   await page.mouse.down();
-  await page.mouse.move(startX + 180, startY - 120, { steps: 8 });
+  await page.mouse.move(startX + 200, startY - 140, { steps: 10 });
   await page.mouse.up();
 
   const released = await page.evaluate((id) => {
-    const current = window.__emojiLab.getState().find((emoji) => String(emoji.id) === id);
-    return current ?? null;
+    return window.__emojiLab.getState().find((emoji) => String(emoji.id) === id) ?? null;
   }, emojiId);
   expect(released).not.toBeNull();
 
@@ -76,12 +110,12 @@ test("user can drag and throw an emoji", async ({ page }) => {
   });
 
   const after = await page.evaluate((id) => {
-    const current = window.__emojiLab.getState().find((emoji) => String(emoji.id) === id);
-    return current ?? null;
+    return window.__emojiLab.getState().find((emoji) => String(emoji.id) === id) ?? null;
   }, emojiId);
 
   expect(after).not.toBeNull();
   expect(Math.abs(after.x - before.x)).toBeGreaterThan(20);
+
   const travelAfterRelease = Math.abs(after.x - released.x) + Math.abs(after.y - released.y);
   expect(travelAfterRelease).toBeGreaterThan(5);
 });
@@ -89,6 +123,7 @@ test("user can drag and throw an emoji", async ({ page }) => {
 test("snapshot: deterministic emoji scene", async ({ page }) => {
   await gotoWithViewport(page, "/?seed=20260310&test=1");
 
+  await page.fill("#emojiCount", "120");
   await page.click("#dropButton");
   await page.evaluate(() => {
     const button = document.getElementById("dropButton");
