@@ -22,82 +22,81 @@ jobs:
 
     steps:
       - name: Scan AI comments and sync blocker label
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const { owner, repo } = context.repo;
-            const labelName = "ai-security-blocker";
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
 
-            let prNumber = null;
-            if (context.eventName === "pull_request") {
-              prNumber = context.payload.pull_request?.number || null;
-            } else if (context.eventName === "issue_comment") {
-              if (context.payload.issue?.pull_request) {
-                prNumber = context.payload.issue.number;
-              }
-            }
+          pr_number=""
+          if [ "${EVENT_NAME}" = "pull_request" ]; then
+            pr_number="$(jq -r '.pull_request.number // empty' "${GITHUB_EVENT_PATH}")"
+          elif [ "${EVENT_NAME}" = "issue_comment" ]; then
+            has_pr_context="$(jq -r 'if (.issue.pull_request // null) == null then "false" else "true" end' "${GITHUB_EVENT_PATH}")"
+            if [ "${has_pr_context}" = "true" ]; then
+              pr_number="$(jq -r '.issue.number // empty' "${GITHUB_EVENT_PATH}")"
+            fi
+          fi
 
-            if (!prNumber) {
-              core.notice("PR 컨텍스트가 없어 라벨 동기화를 건너뜁니다.");
-              return;
-            }
+          if [ -z "${pr_number}" ]; then
+            echo "PR 컨텍스트가 없어 라벨 동기화를 건너뜁니다."
+            exit 0
+          fi
 
-            const comments = await github.paginate(github.rest.issues.listComments, {
-              owner,
-              repo,
-              issue_number: prNumber,
-              per_page: 100
-            });
+          comments_json="$(curl -fsSL \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${REPOSITORY}/issues/${pr_number}/comments?per_page=100")"
 
-            const aiAuthorRegex = /(coderabbit|gemini|code-assist)/i;
-            const blockerRegex = /(high severity|critical vulnerability|security vulnerability|vulnerab|취약점|보안 취약|regression detected|회귀 발견|breaking change)/i;
-            const needsBlock = comments.some((comment) => {
-              const login = String(comment.user?.login || "");
-              const body = String(comment.body || "");
-              return aiAuthorRegex.test(login) && blockerRegex.test(body);
-            });
+          hits="$(echo "${comments_json}" | jq -r '
+            [
+              .[]
+              | select(.user.login | test("coderabbit|gemini|code-assist"; "i"))
+              | select(.body | test("high severity|critical vulnerability|security vulnerability|vulnerab|취약점|보안 취약|regression detected|회귀 발견|breaking change"; "i"))
+            ]
+            | length
+          ')"
 
-            const issue = await github.rest.issues.get({
-              owner,
-              repo,
-              issue_number: prNumber
-            });
-            const labels = (issue.data.labels || []).map((label) =>
-              typeof label === "string" ? label : label.name
-            );
-            const hasLabel = labels.includes(labelName);
+          needs_block="false"
+          if [ "${hits}" -gt 0 ]; then
+            needs_block="true"
+          fi
 
-            if (needsBlock && !hasLabel) {
-              await github.rest.issues.addLabels({
-                owner,
-                repo,
-                issue_number: prNumber,
-                labels: [labelName]
-              });
-              core.notice(`라벨 추가: ${labelName} (PR #${prNumber})`);
-              return;
-            }
+          issue_json="$(curl -fsSL \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${REPOSITORY}/issues/${pr_number}")"
 
-            if (!needsBlock && hasLabel) {
-              try {
-                await github.rest.issues.removeLabel({
-                  owner,
-                  repo,
-                  issue_number: prNumber,
-                  name: labelName
-                });
-                core.notice(`라벨 제거: ${labelName} (PR #${prNumber})`);
-              } catch (error) {
-                if (error?.status !== 404) {
-                  throw error;
-                }
-              }
-              return;
-            }
+          has_label="$(echo "${issue_json}" | jq -r '[.labels[].name] | index("ai-security-blocker") != null')"
 
-            core.notice(
-              `라벨 상태 유지: needsBlock=${needsBlock}, hasLabel=${hasLabel} (PR #${prNumber})`
-            );
+          if [ "${needs_block}" = "true" ] && [ "${has_label}" != "true" ]; then
+            curl -fsSL -X POST \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${REPOSITORY}/issues/${pr_number}/labels" \
+              -d '{"labels":["ai-security-blocker"]}' >/dev/null
+            echo "라벨 추가: ai-security-blocker (PR #${pr_number})"
+            exit 0
+          fi
+
+          if [ "${needs_block}" != "true" ] && [ "${has_label}" = "true" ]; then
+            status_code="$(curl -sS -o /tmp/remove-label-response.txt -w "%{http_code}" -X DELETE \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${REPOSITORY}/issues/${pr_number}/labels/ai-security-blocker")"
+
+            if [ "${status_code}" != "200" ] && [ "${status_code}" != "204" ] && [ "${status_code}" != "404" ]; then
+              echo "라벨 제거 실패(status=${status_code})"
+              cat /tmp/remove-label-response.txt || true
+              exit 1
+            fi
+
+            echo "라벨 제거: ai-security-blocker (PR #${pr_number})"
+            exit 0
+          fi
+
+          echo "라벨 상태 유지: needsBlock=${needs_block}, hasLabel=${has_label} (PR #${pr_number})"
 
   policy-gate:
     name: AI Review Policy
@@ -115,60 +114,52 @@ jobs:
         run: node .github/scripts/validate-ai-pr-body.mjs
 
       - name: Enforce human approval on AI security/regression blockers
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const { owner, repo } = context.repo;
-            const prNumber = context.payload.pull_request?.number;
-            const blockerLabel = "ai-security-blocker";
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
 
-            if (!prNumber) {
-              core.notice("PR 컨텍스트가 없어 승인 정책 체크를 건너뜁니다.");
-              return;
-            }
+          if [ -z "${PR_NUMBER}" ]; then
+            echo "PR 컨텍스트가 없어 승인 정책 체크를 건너뜁니다."
+            exit 0
+          fi
 
-            const pr = await github.rest.pulls.get({
-              owner,
-              repo,
-              pull_number: prNumber
-            });
-            const labels = (pr.data.labels || []).map((label) => label.name);
-            const hasBlocker = labels.includes(blockerLabel);
+          pr_json="$(curl -fsSL \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${REPOSITORY}/pulls/${PR_NUMBER}")"
 
-            if (!hasBlocker) {
-              core.notice("ai-security-blocker 라벨 없음: 승인 강제 조건 없음");
-              return;
-            }
+          has_blocker="$(echo "${pr_json}" | jq -r '[.labels[].name] | index("ai-security-blocker") != null')"
+          if [ "${has_blocker}" != "true" ]; then
+            echo "ai-security-blocker 라벨 없음: 승인 강제 조건 없음"
+            exit 0
+          fi
 
-            const reviews = await github.paginate(github.rest.pulls.listReviews, {
-              owner,
-              repo,
-              pull_number: prNumber,
-              per_page: 100
-            });
+          reviews_json="$(curl -fsSL \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${REPOSITORY}/pulls/${PR_NUMBER}/reviews?per_page=100")"
 
-            const latestByUser = new Map();
-            for (const review of reviews) {
-              const login = review.user?.login;
-              if (!login) continue;
-              const previous = latestByUser.get(login);
-              const prevTime = Date.parse(previous?.submitted_at || 0);
-              const nextTime = Date.parse(review.submitted_at || 0);
-              if (!previous || nextTime >= prevTime || review.id > previous.id) {
-                latestByUser.set(login, review);
+          approvals="$(echo "${reviews_json}" | jq -r '
+            reduce .[] as $review (
+              {};
+              .[$review.user.login] = {
+                state: $review.state,
+                user_type: $review.user.type
               }
-            }
+            )
+            | to_entries
+            | map(select(.value.state == "APPROVED" and .value.user_type != "Bot"))
+            | length
+          ')"
 
-            const humanApprovals = Array.from(latestByUser.values()).filter(
-              (review) => review.state === "APPROVED" && review.user?.type !== "Bot"
-            );
+          if [ "${approvals}" -lt 1 ]; then
+            echo "AI 리뷰에서 보안/회귀 이슈가 감지되었습니다."
+            echo "사람 리뷰어의 APPROVED 상태가 최소 1건 필요합니다."
+            exit 1
+          fi
 
-            if (humanApprovals.length < 1) {
-              core.setFailed(
-                "AI 리뷰에서 보안/회귀 이슈가 감지되었습니다. 사람 리뷰어의 APPROVED 상태가 최소 1건 필요합니다."
-              );
-              return;
-            }
-
-            core.notice(`Blocker detected, human approval count: ${humanApprovals.length}`);
-            core.notice("AI review policy check passed.");
+          echo "Blocker detected, human approval count: ${approvals}"
+          echo "AI review policy check passed."
