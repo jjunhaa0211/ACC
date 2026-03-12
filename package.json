@@ -7,11 +7,19 @@
     "serve:ci": "node .github/scripts/serve-static-ci.mjs . 4173",
     "lint": "eslint . --max-warnings=0",
     "lint:fix": "eslint . --fix",
+    "acc-ci": "node acci/bin/acc-ci.mjs",
+    "acc-ci:init": "node acci/bin/acc-ci.mjs init --project .",
+    "acc-ci:bootstrap": "node acci/bin/acc-ci.mjs bootstrap --project . --provider github",
     "test:e2e": "playwright test",
     "test:e2e:ci": "playwright test --reporter=github,html",
     "capture:pr-screenshot": "node .github/scripts/capture-pr-screenshot.mjs",
     "capture:pr-video": "node .github/scripts/capture-pr-video.mjs",
-    "test:lighthouse": "lhci autorun --config=.lighthouserc.json"
+    "test:lighthouse": "lhci autorun --config=.lighthouserc.json",
+    "test:mock": "node --test tests/generated",
+    "test:ci:universal": "npm run lint --if-present && npm run test:mock --if-present && npm run test --if-present && npm run test:e2e:ci --if-present"
+  },
+  "bin": {
+    "acc-ci": "acci/bin/acc-ci.mjs"
   },
   "devDependencies": {
     "@cyclonedx/cyclonedx-npm": "^4.0.3",

@@ -1,0 +1,42 @@
+{
+  "meta": {
+    "generatedBy": "acc-ci",
+    "generatedAt": "2026-03-12T01:38:47.777Z",
+    "version": 1
+  },
+  "project": {
+    "name": "ACC",
+    "root": "/Users/junha/develop/ACC",
+    "ecosystem": "node"
+  },
+  "testing": {
+    "mockDataDir": "tests/mocks",
+    "generatedTestDir": "tests/generated",
+    "enforceMockSchema": true
+  },
+  "commands": {
+    "install": [
+      "npm ci"
+    ],
+    "lint": [
+      "npm run lint"
+    ],
+    "test": [
+      "npm run test:mock --if-present",
+      "npm run test --if-present",
+      "npm run test:e2e:ci --if-present"
+    ],
+    "coverage": [
+      "npm run test:coverage --if-present"
+    ]
+  },
+  "ci": {
+    "provider": "github",
+    "workflowPath": ".github/workflows/acc-universal-ci.yml"
+  },
+  "qualityGates": {
+    "requireLint": true,
+    "requireTests": true,
+    "requireMockValidation": true
+  }
+}

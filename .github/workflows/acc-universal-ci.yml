@@ -1,0 +1,46 @@
+name: ACC Universal CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: acc-universal-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  quality:
+    name: Universal Quality Gate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Run Universal Verify
+        run: node acci/bin/acc-ci.mjs verify --project . --ci
+
+      - name: Upload Universal Artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: acc-universal-artifacts-${{ github.run_id }}
+          retention-days: 14
+          if-no-files-found: warn
+          path: |
+            test-results
+            playwright-report
+            .lighthouseci
+            tests/mocks
