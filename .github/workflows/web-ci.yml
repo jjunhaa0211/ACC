@@ -496,17 +496,14 @@ jobs:
               "Changed files (top 8):",
               ...(filePreview.length > 0 ? filePreview : ["- (no file list)"]),
               "",
-              "### ChatGPT Codex Connector Request",
-              "@codex review",
-              "Please provide a concise Korean summary of this PR final CI and test status, including:",
-              "1. overall pass/fail signal,",
-              "2. key test outcomes,",
-              "3. current change scope.",
+              "### ChatGPT Codex Connector",
+              "- 이 워크플로우는 아래 별도 단계에서 `@codex review` 트리거 코멘트를 1회 생성합니다.",
+              "- Codex 응답을 한국어로 받도록 트리거 메시지에 한국어 요청 문구를 포함합니다.",
               "",
-              "_If Codex does not respond, verify the ChatGPT Codex Connector app is installed and connected to this repository._"
+              "_Codex 응답이 없으면 ChatGPT Codex Connector 앱 설치/권한/저장소 연결 상태를 확인해주세요._"
             ];
 
-            const body = bodyLines.join("\\n");
+            const body = bodyLines.join("\n");
 
             const comments = await github.paginate(github.rest.issues.listComments, {
               owner,
@@ -533,3 +530,48 @@ jobs:
                 body
               });
             }
+
+      - name: Trigger Codex connector with fresh mention
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const prNumber = context.payload.pull_request?.number;
+            if (!prNumber) {
+              return;
+            }
+
+            const { owner, repo } = context.repo;
+            const headSha = context.payload.pull_request.head.sha;
+            const marker = `<!-- codex-trigger:${headSha} -->`;
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number: prNumber,
+              per_page: 100
+            });
+
+            const alreadyTriggered = comments.some(
+              (comment) => typeof comment.body === "string" && comment.body.includes(marker)
+            );
+            if (alreadyTriggered) {
+              core.notice(`Codex trigger comment already exists for ${headSha}.`);
+              return;
+            }
+
+            const body = [
+              marker,
+              "@codex review",
+              "이 PR의 최신 CI/테스트 상태를 한국어로 3줄 이내로 요약해주세요.",
+              "- 전체 통과/실패",
+              "- 실패/주의 포인트(있다면)",
+              "- 변경 범위 요약"
+            ].join("\n");
+
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: prNumber,
+              body
+            });

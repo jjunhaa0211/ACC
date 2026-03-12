@@ -26,7 +26,7 @@ const random = Number.isFinite(seed) ? createRng(seed) : Math.random;
 const emojiPattern = /\p{Extended_Pictographic}/u;
 
 const SETTINGS = {
-  defaultBurstCount: 120,
+  defaultBurstCount: 20,
   maxBurstCount: 800,
   gravity: 2400,
   airDrag: 0.992,
