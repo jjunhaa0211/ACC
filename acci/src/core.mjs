@@ -222,6 +222,8 @@ export async function verifyProject({
     dryRun
   };
 
+  await runCommandGroup("install", config.commands?.install || [], options);
+
   if (config.qualityGates?.requireLint) {
     await runCommandGroup("lint", config.commands?.lint || [], options);
   }
