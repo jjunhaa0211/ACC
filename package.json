@@ -4,7 +4,7 @@
   "private": true,
   "description": "Static web demo with production-grade CI/CD pipelines.",
   "scripts": {
-    "serve:ci": "http-server . -p 4173 -s",
+    "serve:ci": "node .github/scripts/serve-static-ci.mjs . 4173",
     "lint": "eslint . --max-warnings=0",
     "lint:fix": "eslint . --fix",
     "test:e2e": "playwright test",
@@ -13,12 +13,11 @@
     "test:lighthouse": "lhci autorun --config=.lighthouserc.json"
   },
   "devDependencies": {
-    "@eslint/js": "^9.22.0",
     "@cyclonedx/cyclonedx-npm": "^4.0.3",
+    "@eslint/js": "^9.22.0",
     "@lhci/cli": "^0.15.1",
     "@playwright/test": "^1.55.0",
     "eslint": "^9.22.0",
-    "globals": "^17.4.0",
-    "http-server": "^14.1.1"
+    "globals": "^17.4.0"
   }
 }

@@ -7,9 +7,9 @@ module.exports = defineConfig({
   snapshotPathTemplate: "{testDir}/{testFilePath}-snapshots/{arg}{ext}",
   use: {
     baseURL: "http://127.0.0.1:4173",
-    screenshot: "only-on-failure",
+    screenshot: "on",
     trace: "retain-on-failure",
-    video: "retain-on-failure"
+    video: "on"
   },
   webServer: {
     command: "npm run serve:ci",

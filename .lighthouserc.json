@@ -3,7 +3,7 @@
     "collect": {
       "numberOfRuns": 1,
       "startServerCommand": "npm run serve:ci",
-      "startServerReadyPattern": "http-server",
+      "startServerReadyPattern": "serve-static-ci",
       "startServerReadyTimeout": 30000,
       "url": [
         "http://127.0.0.1:4173/index.html"
