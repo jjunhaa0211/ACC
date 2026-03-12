@@ -23,7 +23,8 @@ const seed = Number.parseInt(query.get("seed") ?? "", 10);
 const isTestMode = query.get("test") === "1";
 
 const random = Number.isFinite(seed) ? createRng(seed) : Math.random;
-const emojiPattern = /\p{Extended_Pictographic}/u;
+const emojiPattern = isTestMode ? /\p{Extended_Pictographic}/u : /\p{Emoji_Presentation}/u;
+const blockedEmojiSymbols = new Set(["🎾", "🧶", "🧵"]);
 
 const SETTINGS = {
   defaultBurstCount: 20,
@@ -54,12 +55,16 @@ let dragState = null;
 
 const emojiCatalog = buildEmojiCatalog();
 const availableSymbols = [];
-const pairKeyBase = emojiCatalog.length + 1;
 const broadPhaseBuckets = new Map();
-const seenCollisionPairs = new Set();
-const collisionPairKeys = [];
+const activeBuckets = [];
 const BUCKET_COORD_OFFSET = 32768;
 const BUCKET_COORD_SPAN = 65536;
+const bucketNeighborOffsets = [
+  [1, 0],
+  [-1, 1],
+  [0, 1],
+  [1, 1]
+];
 let nextSymbolIndex = 0;
 
 resetSymbolPool();
@@ -116,7 +121,7 @@ function buildEmojiCatalog() {
       }
 
       const symbol = String.fromCodePoint(code);
-      if (emojiPattern.test(symbol)) {
+      if (emojiPattern.test(symbol) && (isTestMode || !blockedEmojiSymbols.has(symbol))) {
         unique.add(symbol);
       }
     }
@@ -173,6 +178,37 @@ function getEmojiById(id) {
 
 function getBucketKey(cellX, cellY) {
   return (cellY + BUCKET_COORD_OFFSET) * BUCKET_COORD_SPAN + (cellX + BUCKET_COORD_OFFSET);
+}
+
+function acquireBucket(cellX, cellY) {
+  const key = getBucketKey(cellX, cellY);
+  let bucket = broadPhaseBuckets.get(key);
+
+  if (!bucket) {
+    bucket = {
+      x: cellX,
+      y: cellY,
+      items: [],
+      active: false
+    };
+    broadPhaseBuckets.set(key, bucket);
+  }
+
+  if (!bucket.active) {
+    bucket.active = true;
+    bucket.items.length = 0;
+    activeBuckets.push(bucket);
+  }
+
+  return bucket;
+}
+
+function resetBroadPhaseBuckets() {
+  for (const bucket of activeBuckets) {
+    bucket.active = false;
+    bucket.items.length = 0;
+  }
+  activeBuckets.length = 0;
 }
 
 function makeEmojiElement(id, symbol) {
@@ -374,66 +410,71 @@ function resolveRectCollision(emoji, rect) {
   }
 }
 
+function resolveEmojiPair(first, second) {
+  if (!first || !second) {
+    return;
+  }
+
+  let dx = second.x - first.x;
+  let dy = second.y - first.y;
+  let distanceSquared = dx * dx + dy * dy;
+
+  const minDistance = first.radius + second.radius;
+  const minDistanceSquared = minDistance * minDistance;
+
+  if (distanceSquared >= minDistanceSquared) {
+    return;
+  }
+
+  if (distanceSquared === 0) {
+    dx = randomBetween(-0.5, 0.5) || 0.001;
+    dy = randomBetween(-0.5, 0.5) || 0.001;
+    distanceSquared = dx * dx + dy * dy;
+  }
+
+  const distance = Math.sqrt(distanceSquared);
+  const nx = dx / distance;
+  const ny = dy / distance;
+  const overlap = minDistance - distance;
+
+  if (!first.dragging && !second.dragging) {
+    first.x -= nx * overlap * 0.5;
+    first.y -= ny * overlap * 0.5;
+    second.x += nx * overlap * 0.5;
+    second.y += ny * overlap * 0.5;
+  } else if (!first.dragging && second.dragging) {
+    first.x -= nx * overlap;
+    first.y -= ny * overlap;
+  } else if (first.dragging && !second.dragging) {
+    second.x += nx * overlap;
+    second.y += ny * overlap;
+  }
+
+  const relativeVx = second.vx - first.vx;
+  const relativeVy = second.vy - first.vy;
+  const velocityAlongNormal = relativeVx * nx + relativeVy * ny;
+
+  if (velocityAlongNormal > 0) {
+    return;
+  }
+
+  const impulse = (-(1 + SETTINGS.emojiBounce) * velocityAlongNormal) / 2;
+
+  if (!first.dragging) {
+    first.vx -= impulse * nx;
+    first.vy -= impulse * ny;
+  }
+
+  if (!second.dragging) {
+    second.vx += impulse * nx;
+    second.vy += impulse * ny;
+  }
+}
+
 function resolveEmojiCollisionsLegacy() {
   for (let i = 0; i < emojis.length; i += 1) {
     for (let j = i + 1; j < emojis.length; j += 1) {
-      const first = emojis[i];
-      const second = emojis[j];
-
-      let dx = second.x - first.x;
-      let dy = second.y - first.y;
-      let distanceSquared = dx * dx + dy * dy;
-
-      const minDistance = first.radius + second.radius;
-      const minDistanceSquared = minDistance * minDistance;
-
-      if (distanceSquared >= minDistanceSquared) {
-        continue;
-      }
-
-      if (distanceSquared === 0) {
-        dx = randomBetween(-0.5, 0.5) || 0.001;
-        dy = randomBetween(-0.5, 0.5) || 0.001;
-        distanceSquared = dx * dx + dy * dy;
-      }
-
-      const distance = Math.sqrt(distanceSquared);
-      const nx = dx / distance;
-      const ny = dy / distance;
-      const overlap = minDistance - distance;
-
-      if (!first.dragging && !second.dragging) {
-        first.x -= nx * overlap * 0.5;
-        first.y -= ny * overlap * 0.5;
-        second.x += nx * overlap * 0.5;
-        second.y += ny * overlap * 0.5;
-      } else if (!first.dragging && second.dragging) {
-        first.x -= nx * overlap;
-        first.y -= ny * overlap;
-      } else if (first.dragging && !second.dragging) {
-        second.x += nx * overlap;
-        second.y += ny * overlap;
-      }
-
-      const relativeVx = second.vx - first.vx;
-      const relativeVy = second.vy - first.vy;
-      const velocityAlongNormal = relativeVx * nx + relativeVy * ny;
-
-      if (velocityAlongNormal > 0) {
-        continue;
-      }
-
-      const impulse = (-(1 + SETTINGS.emojiBounce) * velocityAlongNormal) / 2;
-
-      if (!first.dragging) {
-        first.vx -= impulse * nx;
-        first.vy -= impulse * ny;
-      }
-
-      if (!second.dragging) {
-        second.vx += impulse * nx;
-        second.vy += impulse * ny;
-      }
+      resolveEmojiPair(emojis[i], emojis[j]);
     }
   }
 }
@@ -444,121 +485,46 @@ function resolveEmojiCollisions() {
     return;
   }
 
-  broadPhaseBuckets.clear();
-  seenCollisionPairs.clear();
-  collisionPairKeys.length = 0;
-
+  resetBroadPhaseBuckets();
   const { collisionCellSize } = SETTINGS;
 
   for (let index = 0; index < emojis.length; index += 1) {
     const emoji = emojis[index];
-    const minCellX = Math.floor((emoji.x - emoji.radius) / collisionCellSize);
-    const maxCellX = Math.floor((emoji.x + emoji.radius) / collisionCellSize);
-    const minCellY = Math.floor((emoji.y - emoji.radius) / collisionCellSize);
-    const maxCellY = Math.floor((emoji.y + emoji.radius) / collisionCellSize);
-
-    for (let cellY = minCellY; cellY <= maxCellY; cellY += 1) {
-      for (let cellX = minCellX; cellX <= maxCellX; cellX += 1) {
-        const bucketKey = getBucketKey(cellX, cellY);
-        let bucket = broadPhaseBuckets.get(bucketKey);
-        if (!bucket) {
-          bucket = [];
-          broadPhaseBuckets.set(bucketKey, bucket);
-        }
-        bucket.push(index);
-      }
-    }
+    const cellX = Math.floor(emoji.x / collisionCellSize);
+    const cellY = Math.floor(emoji.y / collisionCellSize);
+    acquireBucket(cellX, cellY).items.push(index);
   }
 
-  for (const bucket of broadPhaseBuckets.values()) {
-    const bucketSize = bucket.length;
-    if (bucketSize < 2) {
-      continue;
-    }
+  for (const bucket of activeBuckets) {
+    const bucketItems = bucket.items;
+    const bucketItemCount = bucketItems.length;
 
-    for (let firstBucketIndex = 0; firstBucketIndex < bucketSize; firstBucketIndex += 1) {
-      const firstIndex = bucket[firstBucketIndex];
-      for (let secondBucketIndex = firstBucketIndex + 1; secondBucketIndex < bucketSize; secondBucketIndex += 1) {
-        const secondIndex = bucket[secondBucketIndex];
-        const minIndex = Math.min(firstIndex, secondIndex);
-        const maxIndex = Math.max(firstIndex, secondIndex);
-        const pairKey = minIndex * pairKeyBase + maxIndex;
-
-        if (seenCollisionPairs.has(pairKey)) {
-          continue;
+    if (bucketItemCount >= 2) {
+      for (let firstBucketIndex = 0; firstBucketIndex < bucketItemCount; firstBucketIndex += 1) {
+        const first = emojis[bucketItems[firstBucketIndex]];
+        for (let secondBucketIndex = firstBucketIndex + 1; secondBucketIndex < bucketItemCount; secondBucketIndex += 1) {
+          const second = emojis[bucketItems[secondBucketIndex]];
+          resolveEmojiPair(first, second);
         }
-
-        seenCollisionPairs.add(pairKey);
-        collisionPairKeys.push(pairKey);
       }
     }
-  }
 
-  collisionPairKeys.sort((left, right) => left - right);
+    for (const [offsetX, offsetY] of bucketNeighborOffsets) {
+      const neighborKey = getBucketKey(bucket.x + offsetX, bucket.y + offsetY);
+      const neighborBucket = broadPhaseBuckets.get(neighborKey);
 
-  for (const pairKey of collisionPairKeys) {
-    const firstIndex = Math.trunc(pairKey / pairKeyBase);
-    const secondIndex = pairKey % pairKeyBase;
-    const first = emojis[firstIndex];
-    const second = emojis[secondIndex];
+      if (!neighborBucket || !neighborBucket.active) {
+        continue;
+      }
 
-    if (!first || !second) {
-      continue;
-    }
-
-    let dx = second.x - first.x;
-    let dy = second.y - first.y;
-    let distanceSquared = dx * dx + dy * dy;
-
-    const minDistance = first.radius + second.radius;
-    const minDistanceSquared = minDistance * minDistance;
-
-    if (distanceSquared >= minDistanceSquared) {
-      continue;
-    }
-
-    if (distanceSquared === 0) {
-      dx = randomBetween(-0.5, 0.5) || 0.001;
-      dy = randomBetween(-0.5, 0.5) || 0.001;
-      distanceSquared = dx * dx + dy * dy;
-    }
-
-    const distance = Math.sqrt(distanceSquared);
-    const nx = dx / distance;
-    const ny = dy / distance;
-    const overlap = minDistance - distance;
-
-    if (!first.dragging && !second.dragging) {
-      first.x -= nx * overlap * 0.5;
-      first.y -= ny * overlap * 0.5;
-      second.x += nx * overlap * 0.5;
-      second.y += ny * overlap * 0.5;
-    } else if (!first.dragging && second.dragging) {
-      first.x -= nx * overlap;
-      first.y -= ny * overlap;
-    } else if (first.dragging && !second.dragging) {
-      second.x += nx * overlap;
-      second.y += ny * overlap;
-    }
-
-    const relativeVx = second.vx - first.vx;
-    const relativeVy = second.vy - first.vy;
-    const velocityAlongNormal = relativeVx * nx + relativeVy * ny;
-
-    if (velocityAlongNormal > 0) {
-      continue;
-    }
-
-    const impulse = (-(1 + SETTINGS.emojiBounce) * velocityAlongNormal) / 2;
-
-    if (!first.dragging) {
-      first.vx -= impulse * nx;
-      first.vy -= impulse * ny;
-    }
-
-    if (!second.dragging) {
-      second.vx += impulse * nx;
-      second.vy += impulse * ny;
+      const neighborItems = neighborBucket.items;
+      for (let firstBucketIndex = 0; firstBucketIndex < bucketItemCount; firstBucketIndex += 1) {
+        const first = emojis[bucketItems[firstBucketIndex]];
+        for (let secondBucketIndex = 0; secondBucketIndex < neighborItems.length; secondBucketIndex += 1) {
+          const second = emojis[neighborItems[secondBucketIndex]];
+          resolveEmojiPair(first, second);
+        }
+      }
     }
   }
 }
