@@ -10,6 +10,7 @@
     "test:e2e": "playwright test",
     "test:e2e:ci": "playwright test --reporter=github,html",
     "capture:pr-screenshot": "node .github/scripts/capture-pr-screenshot.mjs",
+    "capture:pr-video": "node .github/scripts/capture-pr-video.mjs",
     "test:lighthouse": "lhci autorun --config=.lighthouserc.json"
   },
   "devDependencies": {
