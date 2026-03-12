@@ -1,0 +1,213 @@
+name: CI Final Summary
+
+on:
+  workflow_run:
+    workflows:
+      - Web CI
+      - ACC Universal CI
+      - SBOM (CycloneDX)
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: read
+  checks: read
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: ci-final-summary-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
+
+jobs:
+  post-final-summary:
+    name: Post Final CI Summary
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Build CI summary and request Codex summary
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const requiredWorkflows = [
+              "Web CI",
+              "ACC Universal CI",
+              "SBOM (CycloneDX)"
+            ];
+            const marker = "<!-- ci-final-chatgpt-summary -->";
+            const run = context.payload.workflow_run;
+
+            if (!run || run.event !== "pull_request" || !Array.isArray(run.pull_requests) || run.pull_requests.length === 0) {
+              core.notice("Skip: workflow_run is not tied to a pull request.");
+              return;
+            }
+
+            const prNumber = run.pull_requests[0].number;
+            const headSha = run.head_sha;
+            const { owner, repo } = context.repo;
+
+            const allRuns = await github.paginate(github.rest.actions.listWorkflowRunsForRepo, {
+              owner,
+              repo,
+              event: "pull_request",
+              per_page: 100
+            });
+
+            const pickLatestRun = (workflowName) => {
+              const candidates = allRuns
+                .filter((item) => item.name === workflowName)
+                .filter((item) => item.head_sha === headSha)
+                .filter((item) => Array.isArray(item.pull_requests) && item.pull_requests.some((pr) => pr.number === prNumber))
+                .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+              return candidates[0] || null;
+            };
+
+            const selectedRuns = requiredWorkflows.map((name) => ({
+              name,
+              run: pickLatestRun(name)
+            }));
+
+            const missing = selectedRuns.filter((item) => !item.run).map((item) => item.name);
+            if (missing.length > 0) {
+              core.notice(`Skip: missing runs for workflows: ${missing.join(", ")}`);
+              return;
+            }
+
+            const incomplete = selectedRuns
+              .filter((item) => item.run.status !== "completed")
+              .map((item) => `${item.name} (${item.run.status})`);
+            if (incomplete.length > 0) {
+              core.notice(`Skip: runs not completed yet: ${incomplete.join(", ")}`);
+              return;
+            }
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number: prNumber,
+              per_page: 100
+            });
+            const existing = comments.find(
+              (comment) => comment.user?.login === "github-actions[bot]" && typeof comment.body === "string" && comment.body.includes(marker)
+            );
+
+            if (existing && existing.body.includes(`Head SHA: \`${headSha}\``)) {
+              core.notice(`Skip: summary comment already exists for SHA ${headSha}.`);
+              return;
+            }
+
+            const prResponse = await github.rest.pulls.get({
+              owner,
+              repo,
+              pull_number: prNumber
+            });
+            const pr = prResponse.data;
+
+            const changedFiles = await github.paginate(github.rest.pulls.listFiles, {
+              owner,
+              repo,
+              pull_number: prNumber,
+              per_page: 100
+            });
+
+            const statusLabel = (conclusion) => {
+              if (conclusion === "success") return "SUCCESS";
+              if (conclusion === "failure") return "FAILURE";
+              if (conclusion === "cancelled") return "CANCELLED";
+              if (conclusion === "skipped") return "SKIPPED";
+              return "UNKNOWN";
+            };
+
+            const workflowRows = [];
+            const testRows = [];
+
+            for (const item of selectedRuns) {
+              const runInfo = item.run;
+              workflowRows.push(
+                `| ${item.name} | ${statusLabel(runInfo.conclusion)} | [run](${runInfo.html_url}) |`
+              );
+
+              const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
+                owner,
+                repo,
+                run_id: runInfo.id,
+                per_page: 100
+              });
+
+              for (const job of jobs) {
+                const lowerName = String(job.name || "").toLowerCase();
+                const looksLikeTestJob =
+                  lowerName.includes("test") ||
+                  lowerName.includes("e2e") ||
+                  lowerName.includes("playwright") ||
+                  lowerName.includes("lighthouse") ||
+                  lowerName.includes("quality gate");
+
+                if (!looksLikeTestJob) {
+                  continue;
+                }
+
+                testRows.push(
+                  `| ${job.name} | ${statusLabel(job.conclusion)} | [details](${job.html_url}) |`
+                );
+              }
+            }
+
+            const filePreview = changedFiles
+              .slice(0, 8)
+              .map((file) => `- \`${file.filename}\` (+${file.additions}/-${file.deletions})`);
+
+            const bodyLines = [
+              marker,
+              "## Final CI Digest (Auto)",
+              "",
+              `Head SHA: \`${headSha}\``,
+              `PR: #${pr.number} (${pr.title})`,
+              "",
+              "### Workflow Results",
+              "| Workflow | Status | Link |",
+              "|---|---|---|",
+              ...workflowRows,
+              "",
+              "### Test Signals",
+              "| Test Job | Status | Link |",
+              "|---|---|---|",
+              ...(testRows.length > 0 ? testRows : ["| (no detected test-like jobs) | N/A | - |"]),
+              "",
+              "### Current PR Snapshot",
+              `- Files changed: ${pr.changed_files}`,
+              `- Additions/Deletions: +${pr.additions}/-${pr.deletions}`,
+              `- Latest update: ${pr.updated_at}`,
+              "",
+              "Changed files (top 8):",
+              ...(filePreview.length > 0 ? filePreview : ["- (no file list)"]),
+              "",
+              "### ChatGPT Codex Connector Request",
+              "@codex review",
+              "Please provide a concise Korean summary of this PR final CI and test results, including:",
+              "1. overall pass/fail signal,",
+              "2. key test outcomes,",
+              "3. current change scope.",
+              "",
+              "_If Codex does not respond, verify the ChatGPT Codex Connector app is installed and connected to this repository._"
+            ];
+
+            const body = bodyLines.join("\n");
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body
+              });
+              core.notice(`Updated existing final summary comment (comment_id=${existing.id}).`);
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: prNumber,
+                body
+              });
+              core.notice("Created final summary comment.");
+            }
