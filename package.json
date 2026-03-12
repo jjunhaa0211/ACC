@@ -8,7 +8,8 @@
     "lint": "eslint . --max-warnings=0",
     "lint:fix": "eslint . --fix",
     "test:e2e": "playwright test",
-    "test:e2e:ci": "playwright test --reporter=list",
+    "test:e2e:ci": "playwright test --reporter=github,html",
+    "capture:pr-screenshot": "node .github/scripts/capture-pr-screenshot.mjs",
     "test:lighthouse": "lhci autorun --config=.lighthouserc.json"
   },
   "devDependencies": {

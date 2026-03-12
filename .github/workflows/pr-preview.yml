@@ -10,6 +10,10 @@ on:
         description: "수동 배포할 PR 번호"
         required: true
 
+concurrency:
+  group: pr-preview-${{ github.event.pull_request.number || github.event.inputs.pr_number || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
   pull-requests: write
@@ -19,6 +23,8 @@ jobs:
     name: Netlify Preview
     runs-on: ubuntu-latest
     if: secrets.NETLIFY_AUTH_TOKEN != '' && secrets.NETLIFY_SITE_ID != ''
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.cache/ms-playwright
 
     steps:
       - name: Checkout
@@ -44,6 +50,22 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Cache Playwright browser
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
+          key: ${{ runner.os }}-playwright-preview-${{ hashFiles('package-lock.json') }}
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Capture PR screenshot
+        run: npm run capture:pr-screenshot -- dist/ci/pr-preview.png
 
       - name: Install Netlify CLI
         run: npm i -g netlify-cli
@@ -87,6 +109,9 @@ jobs:
             - Netlify Preview URL: ${{ steps.deploy.outputs.preview_url }}
             - 상태: 배포 완료
 
+            ### 🖼️ CI 자동 화면 캡처
+            ![PR Screen Capture](${{ steps.deploy.outputs.preview_url }}/ci/pr-preview.png?run=${{ github.run_id }})
+
             _자동 생성 코멘트입니다._
 
   preview-secrets-missing:
@@ -126,5 +151,6 @@ jobs:
             PR 프리뷰 배포를 위해 아래 시크릿이 필요합니다.
             - `NETLIFY_AUTH_TOKEN`
             - `NETLIFY_SITE_ID`
+            - 미설정 시 PR 코멘트 자동 화면 캡처도 표시되지 않습니다.
 
             _자동 생성 코멘트입니다._
