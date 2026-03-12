@@ -10,9 +10,7 @@
 
 ## AI 리뷰 요청
 - PR 생성 후 코멘트에 아래를 입력해 AI 리뷰를 요청하세요.
-- `/gemini review`
-- `한국어(ko-KR)로 리뷰해주세요.`
-- `@coderabbitai review`
-- `Please review this PR in Korean (ko-KR).`
+- `/gemini review 한국어(ko-KR)로 리뷰해주세요.`
+- `@coderabbitai review Please review this PR in Korean (ko-KR).`
 - `@codex review`
 - `이 PR의 CI/테스트 결과를 한국어로 요약해주세요.`

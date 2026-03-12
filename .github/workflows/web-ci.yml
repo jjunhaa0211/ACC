@@ -496,12 +496,9 @@ jobs:
               "Changed files (top 8):",
               ...(filePreview.length > 0 ? filePreview : ["- (no file list)"]),
               "",
-              "### ChatGPT Codex Connector 요청",
-              "@codex review",
-              "위 CI 결과를 바탕으로 아래 항목을 한국어로 간단히 정리해주세요.",
-              "1. 전체 통과/실패 요약",
-              "2. 핵심 테스트 결과",
-              "3. 현재 변경 범위",
+              "### ChatGPT Codex Connector",
+              "- 이 워크플로우는 아래 별도 단계에서 `@codex review` 트리거 코멘트를 1회 생성합니다.",
+              "- Codex 응답을 한국어로 받도록 트리거 메시지에 한국어 요청 문구를 포함합니다.",
               "",
               "_Codex 응답이 없으면 ChatGPT Codex Connector 앱 설치/권한/저장소 연결 상태를 확인해주세요._"
             ];
