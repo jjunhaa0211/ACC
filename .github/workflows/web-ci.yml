@@ -506,7 +506,7 @@ jobs:
               "_If Codex does not respond, verify the ChatGPT Codex Connector app is installed and connected to this repository._"
             ];
 
-            const body = bodyLines.join("\\n");
+            const body = bodyLines.join("\n");
 
             const comments = await github.paginate(github.rest.issues.listComments, {
               owner,
