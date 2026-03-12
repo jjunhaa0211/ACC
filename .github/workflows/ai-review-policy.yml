@@ -77,6 +77,15 @@ jobs:
     if: (github.event_name == 'pull_request' || github.event_name == 'pull_request_review') && github.event.pull_request.draft == false
 
     steps:
+      - name: Checkout policy scripts
+        uses: actions/checkout@v6
+
+      - name: Enforce AI PR body contract
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: node .github/scripts/validate-ai-pr-body.mjs
+
       - name: Enforce human approval on AI security/regression blockers
         env:
           GH_TOKEN: ${{ github.token }}

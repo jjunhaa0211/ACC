@@ -2,7 +2,12 @@ import path from "node:path";
 import { fileExists, readJson, writeFileIfNeeded, writeJson } from "./fs-utils.mjs";
 import { pluginRegistry, getPlugin } from "./plugins.mjs";
 import { runCommand } from "./shell-utils.mjs";
-import { githubWorkflowTemplate } from "./templates.mjs";
+import {
+  aiPrBodyValidatorScriptTemplate,
+  aiPrPolicyWorkflowTemplate,
+  aiPrTemplate,
+  githubWorkflowTemplate
+} from "./templates.mjs";
 
 export const CONFIG_PATH = ".acci/config.json";
 
@@ -128,6 +133,24 @@ export async function setupCi({ projectDir, provider = "github", force = false }
   const config = await loadConfig(projectDir);
   const workflowPath = config?.ci?.workflowPath || ".github/workflows/acc-universal-ci.yml";
   const absoluteWorkflowPath = path.join(projectDir, workflowPath);
+  const artifacts = [
+    {
+      path: absoluteWorkflowPath,
+      contents: githubWorkflowTemplate()
+    },
+    {
+      path: path.join(projectDir, ".github", "workflows", "ai-pr-policy.yml"),
+      contents: aiPrPolicyWorkflowTemplate()
+    },
+    {
+      path: path.join(projectDir, ".github", "scripts", "validate-ai-pr-body.mjs"),
+      contents: aiPrBodyValidatorScriptTemplate()
+    },
+    {
+      path: path.join(projectDir, ".github", "pull_request_template.md"),
+      contents: aiPrTemplate()
+    }
+  ];
 
   if (provider !== "github") {
     return {
@@ -136,11 +159,19 @@ export async function setupCi({ projectDir, provider = "github", force = false }
     };
   }
 
-  const result = await writeFileIfNeeded(absoluteWorkflowPath, githubWorkflowTemplate(), { force });
+  const generatedPaths = [];
+  for (const artifact of artifacts) {
+    const result = await writeFileIfNeeded(artifact.path, artifact.contents, { force });
+    if (result.written) {
+      generatedPaths.push(path.relative(projectDir, artifact.path));
+    }
+  }
+
   return {
-    generated: result.written,
+    generated: generatedPaths.length > 0,
     workflowPath,
-    reason: result.reason
+    generatedPaths,
+    reason: generatedPaths.length > 0 ? "generated" : "exists"
   };
 }
 
