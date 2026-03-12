@@ -333,18 +333,50 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Detect Lighthouse scope
+        id: lighthouse_scope
+        run: |
+          set -euo pipefail
+          run_lighthouse=true
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            run_lighthouse=false
+            base_sha="${{ github.event.pull_request.base.sha }}"
+            head_sha="${{ github.event.pull_request.head.sha }}"
+
+            git diff --name-only "${base_sha}" "${head_sha}" > changed-files.txt
+            echo "Changed files between base/head:"
+            cat changed-files.txt || true
+
+            if grep -Eq '(^|/)(index\.html|script\.js|package\.json|package-lock\.json|npm-shrinkwrap\.json|\.lighthouserc\.json|\.github/scripts/check-static-site\.mjs|\.github/scripts/serve-static-ci\.mjs)$' changed-files.txt; then
+              run_lighthouse=true
+            fi
+          fi
+
+          echo "run_lighthouse=${run_lighthouse}" >> "$GITHUB_OUTPUT"
+          echo "Run Lighthouse: ${run_lighthouse}"
 
       - name: Setup Node
+        if: steps.lighthouse_scope.outputs.run_lighthouse == 'true'
         uses: actions/setup-node@v6
         with:
           node-version: 20
           cache: npm
 
       - name: Install dependencies
+        if: steps.lighthouse_scope.outputs.run_lighthouse == 'true'
         run: npm ci
 
       - name: Run Lighthouse quality gate
+        if: steps.lighthouse_scope.outputs.run_lighthouse == 'true'
         run: npm run test:lighthouse
+
+      - name: Skip notice
+        if: steps.lighthouse_scope.outputs.run_lighthouse != 'true'
+        run: echo "프론트 성능 관련 파일 변경이 없어 Lighthouse CI를 건너뜁니다."
 
   web-ci-status:
     name: Web CI

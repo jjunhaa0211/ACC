@@ -21,55 +21,83 @@ jobs:
     if: github.event_name == 'issue_comment' || github.event_name == 'pull_request'
 
     steps:
-      - name: Resolve PR number
-        id: pr
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            echo "number=${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
-          else
-            if [ -z "${{ github.event.issue.pull_request.url }}" ]; then
-              echo "PR 코멘트 이벤트가 아니라서 종료"
-              echo "number=" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-            echo "number=${{ github.event.issue.number }}" >> "$GITHUB_OUTPUT"
-          fi
+      - name: Scan AI comments and sync blocker label
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const labelName = "ai-security-blocker";
 
-      - name: Scan AI comments for blocker keywords
-        if: steps.pr.outputs.number != ''
-        id: scan
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          comments=$(gh api "repos/${{ github.repository }}/issues/${{ steps.pr.outputs.number }}/comments")
-          hits=$(echo "$comments" | jq -r '
-            .[]
-            | select(.user.login | test("coderabbit|gemini|code-assist"; "i"))
-            | select(.body | test("security|vulnerab|취약|보안|regression|회귀|breaking|critical|high severity"; "i"))
-            | .id
-          ' | wc -l | tr -d ' ')
+            let prNumber = null;
+            if (context.eventName === "pull_request") {
+              prNumber = context.payload.pull_request?.number || null;
+            } else if (context.eventName === "issue_comment") {
+              if (context.payload.issue?.pull_request) {
+                prNumber = context.payload.issue.number;
+              }
+            }
 
-          if [ "$hits" -gt 0 ]; then
-            echo "needs_block=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "needs_block=false" >> "$GITHUB_OUTPUT"
-          fi
+            if (!prNumber) {
+              core.notice("PR 컨텍스트가 없어 라벨 동기화를 건너뜁니다.");
+              return;
+            }
 
-      - name: Add blocker label
-        if: steps.pr.outputs.number != '' && steps.scan.outputs.needs_block == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh pr edit "${{ steps.pr.outputs.number }}" --repo "${{ github.repository }}" --add-label ai-security-blocker || true
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number: prNumber,
+              per_page: 100
+            });
 
-      - name: Remove blocker label when cleared
-        if: steps.pr.outputs.number != '' && steps.scan.outputs.needs_block == 'false'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh pr edit "${{ steps.pr.outputs.number }}" --repo "${{ github.repository }}" --remove-label ai-security-blocker || true
+            const aiAuthorRegex = /(coderabbit|gemini|code-assist)/i;
+            const blockerRegex = /(security|vulnerab|취약|보안|regression|회귀|breaking|critical|high severity)/i;
+            const needsBlock = comments.some((comment) => {
+              const login = String(comment.user?.login || "");
+              const body = String(comment.body || "");
+              return aiAuthorRegex.test(login) && blockerRegex.test(body);
+            });
+
+            const issue = await github.rest.issues.get({
+              owner,
+              repo,
+              issue_number: prNumber
+            });
+            const labels = (issue.data.labels || []).map((label) =>
+              typeof label === "string" ? label : label.name
+            );
+            const hasLabel = labels.includes(labelName);
+
+            if (needsBlock && !hasLabel) {
+              await github.rest.issues.addLabels({
+                owner,
+                repo,
+                issue_number: prNumber,
+                labels: [labelName]
+              });
+              core.notice(`라벨 추가: ${labelName} (PR #${prNumber})`);
+              return;
+            }
+
+            if (!needsBlock && hasLabel) {
+              try {
+                await github.rest.issues.removeLabel({
+                  owner,
+                  repo,
+                  issue_number: prNumber,
+                  name: labelName
+                });
+                core.notice(`라벨 제거: ${labelName} (PR #${prNumber})`);
+              } catch (error) {
+                if (error?.status !== 404) {
+                  throw error;
+                }
+              }
+              return;
+            }
+
+            core.notice(
+              `라벨 상태 유지: needsBlock=${needsBlock}, hasLabel=${hasLabel} (PR #${prNumber})`
+            );
 
   policy-gate:
     name: AI Review Policy
@@ -87,42 +115,60 @@ jobs:
         run: node .github/scripts/validate-ai-pr-body.mjs
 
       - name: Enforce human approval on AI security/regression blockers
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          labels=$(gh pr view "${{ github.event.pull_request.number }}" --repo "${{ github.repository }}" --json labels --jq '.labels[].name')
-          has_blocker=false
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const prNumber = context.payload.pull_request?.number;
+            const blockerLabel = "ai-security-blocker";
 
-          if echo "$labels" | grep -qx "ai-security-blocker"; then
-            has_blocker=true
-          fi
+            if (!prNumber) {
+              core.notice("PR 컨텍스트가 없어 승인 정책 체크를 건너뜁니다.");
+              return;
+            }
 
-          if [ "$has_blocker" = true ]; then
-            approvals=$(
-              gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/reviews" --jq '
-                reduce .[] as $review (
-                  {};
-                  .[$review.user.login] = {
-                    state: $review.state,
-                    user_type: $review.user.type
-                  }
-                )
-                | to_entries
-                | [ .[]
-                    | select(.value.state == "APPROVED")
-                    | select(.value.user_type != "Bot")
-                  ]
-                | length
-              '
-            )
+            const pr = await github.rest.pulls.get({
+              owner,
+              repo,
+              pull_number: prNumber
+            });
+            const labels = (pr.data.labels || []).map((label) => label.name);
+            const hasBlocker = labels.includes(blockerLabel);
 
-            if [ "${approvals}" -lt 1 ]; then
-              echo "AI 리뷰에서 보안/회귀 이슈가 감지되었습니다."
-              echo "사람 리뷰어의 APPROVED 상태가 최소 1건 필요합니다."
-              exit 1
-            fi
+            if (!hasBlocker) {
+              core.notice("ai-security-blocker 라벨 없음: 승인 강제 조건 없음");
+              return;
+            }
 
-            echo "Blocker detected, human approval count: ${approvals}"
-          fi
+            const reviews = await github.paginate(github.rest.pulls.listReviews, {
+              owner,
+              repo,
+              pull_number: prNumber,
+              per_page: 100
+            });
 
-          echo "AI review policy check passed."
+            const latestByUser = new Map();
+            for (const review of reviews) {
+              const login = review.user?.login;
+              if (!login) continue;
+              const previous = latestByUser.get(login);
+              const prevTime = Date.parse(previous?.submitted_at || 0);
+              const nextTime = Date.parse(review.submitted_at || 0);
+              if (!previous || nextTime >= prevTime || review.id > previous.id) {
+                latestByUser.set(login, review);
+              }
+            }
+
+            const humanApprovals = Array.from(latestByUser.values()).filter(
+              (review) => review.state === "APPROVED" && review.user?.type !== "Bot"
+            );
+
+            if (humanApprovals.length < 1) {
+              core.setFailed(
+                "AI 리뷰에서 보안/회귀 이슈가 감지되었습니다. 사람 리뷰어의 APPROVED 상태가 최소 1건 필요합니다."
+              );
+              return;
+            }
+
+            core.notice(`Blocker detected, human approval count: ${humanApprovals.length}`);
+            core.notice("AI review policy check passed.");
