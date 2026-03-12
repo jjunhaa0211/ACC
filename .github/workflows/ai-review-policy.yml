@@ -18,62 +18,92 @@ jobs:
   label-from-ai-comments:
     name: Detect AI Findings Label
     runs-on: ubuntu-latest
-    if: github.event_name == 'issue_comment' || github.event_name == 'pull_request'
+    if: github.event_name == 'issue_comment' || github.event_name == 'pull_request' || github.event_name == 'pull_request_review'
 
     steps:
-      - name: Resolve PR number
-        id: pr
+      - name: Scan AI comments and sync blocker label
         env:
           GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          REPOSITORY: ${{ github.repository }}
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            echo "number=${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
-          else
-            if [ -z "${{ github.event.issue.pull_request.url }}" ]; then
-              echo "PR 코멘트 이벤트가 아니라서 종료"
-              echo "number=" >> "$GITHUB_OUTPUT"
-              exit 0
+          set -euo pipefail
+
+          pr_number=""
+          if [ "${EVENT_NAME}" = "pull_request" ]; then
+            pr_number="$(jq -r '.pull_request.number // empty' "${GITHUB_EVENT_PATH}")"
+          elif [ "${EVENT_NAME}" = "pull_request_review" ]; then
+            pr_number="$(jq -r '.pull_request.number // empty' "${GITHUB_EVENT_PATH}")"
+          elif [ "${EVENT_NAME}" = "issue_comment" ]; then
+            has_pr_context="$(jq -r 'if (.issue.pull_request // null) == null then "false" else "true" end' "${GITHUB_EVENT_PATH}")"
+            if [ "${has_pr_context}" = "true" ]; then
+              pr_number="$(jq -r '.issue.number // empty' "${GITHUB_EVENT_PATH}")"
             fi
-            echo "number=${{ github.event.issue.number }}" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Scan AI comments for blocker keywords
-        if: steps.pr.outputs.number != ''
-        id: scan
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          comments=$(gh api "repos/${{ github.repository }}/issues/${{ steps.pr.outputs.number }}/comments")
-          hits=$(echo "$comments" | jq -r '
-            .[]
-            | select(.user.login | test("coderabbit|gemini|code-assist"; "i"))
-            | select(.body | test("security|vulnerab|취약|보안|regression|회귀|breaking|critical|high severity"; "i"))
-            | .id
-          ' | wc -l | tr -d ' ')
-
-          if [ "$hits" -gt 0 ]; then
-            echo "needs_block=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "needs_block=false" >> "$GITHUB_OUTPUT"
+          if [ -z "${pr_number}" ]; then
+            echo "PR 컨텍스트가 없어 라벨 동기화를 건너뜁니다."
+            exit 0
           fi
 
-      - name: Add blocker label
-        if: steps.pr.outputs.number != '' && steps.scan.outputs.needs_block == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh pr edit "${{ steps.pr.outputs.number }}" --repo "${{ github.repository }}" --add-label ai-security-blocker || true
+          comments_json="$(curl -fsSL \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${REPOSITORY}/issues/${pr_number}/comments?per_page=100")"
 
-      - name: Remove blocker label when cleared
-        if: steps.pr.outputs.number != '' && steps.scan.outputs.needs_block == 'false'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh pr edit "${{ steps.pr.outputs.number }}" --repo "${{ github.repository }}" --remove-label ai-security-blocker || true
+          hits="$(echo "${comments_json}" | jq -r '
+            [
+              .[]
+              | select(.user.login | test("coderabbit|gemini|code-assist"; "i"))
+              | select(.body | test("critical vulnerability|security vulnerability detected|취약점 발견|보안 취약점 발견|regression detected|회귀 발견|breaking change detected|high severity.*(security|vulnerab|regression|보안|회귀)"; "i"))
+            ]
+            | length
+          ')"
+
+          needs_block="false"
+          if [ "${hits}" -gt 0 ]; then
+            needs_block="true"
+          fi
+
+          issue_json="$(curl -fsSL \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${REPOSITORY}/issues/${pr_number}")"
+
+          has_label="$(echo "${issue_json}" | jq -r '[.labels[].name] | index("ai-security-blocker") != null')"
+
+          if [ "${needs_block}" = "true" ] && [ "${has_label}" != "true" ]; then
+            curl -fsSL -X POST \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${REPOSITORY}/issues/${pr_number}/labels" \
+              -d '{"labels":["ai-security-blocker"]}' >/dev/null
+            echo "라벨 추가: ai-security-blocker (PR #${pr_number})"
+            exit 0
+          fi
+
+          if [ "${needs_block}" != "true" ] && [ "${has_label}" = "true" ]; then
+            status_code="$(curl -sS -o /tmp/remove-label-response.txt -w "%{http_code}" -X DELETE \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${REPOSITORY}/issues/${pr_number}/labels/ai-security-blocker")"
+
+            if [ "${status_code}" != "200" ] && [ "${status_code}" != "204" ] && [ "${status_code}" != "404" ]; then
+              echo "라벨 제거 실패(status=${status_code})"
+              cat /tmp/remove-label-response.txt || true
+              exit 1
+            fi
+
+            echo "라벨 제거: ai-security-blocker (PR #${pr_number})"
+            exit 0
+          fi
+
+          echo "라벨 상태 유지: needsBlock=${needs_block}, hasLabel=${has_label} (PR #${pr_number})"
 
   policy-gate:
     name: AI Review Policy
     runs-on: ubuntu-latest
+    needs: [label-from-ai-comments]
     if: (github.event_name == 'pull_request' || github.event_name == 'pull_request_review') && github.event.pull_request.draft == false
 
     steps:
@@ -89,40 +119,80 @@ jobs:
       - name: Enforce human approval on AI security/regression blockers
         env:
           GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPOSITORY: ${{ github.repository }}
         run: |
-          labels=$(gh pr view "${{ github.event.pull_request.number }}" --repo "${{ github.repository }}" --json labels --jq '.labels[].name')
-          has_blocker=false
+          set -euo pipefail
 
-          if echo "$labels" | grep -qx "ai-security-blocker"; then
-            has_blocker=true
+          if [ -z "${PR_NUMBER}" ]; then
+            echo "PR 컨텍스트가 없어 승인 정책 체크를 건너뜁니다."
+            exit 0
           fi
 
-          if [ "$has_blocker" = true ]; then
-            approvals=$(
-              gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/reviews" --jq '
-                reduce .[] as $review (
-                  {};
-                  .[$review.user.login] = {
-                    state: $review.state,
-                    user_type: $review.user.type
-                  }
-                )
-                | to_entries
-                | [ .[]
-                    | select(.value.state == "APPROVED")
-                    | select(.value.user_type != "Bot")
-                  ]
-                | length
-              '
-            )
+          pr_json="$(curl -fsSL \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${REPOSITORY}/pulls/${PR_NUMBER}")"
 
-            if [ "${approvals}" -lt 1 ]; then
-              echo "AI 리뷰에서 보안/회귀 이슈가 감지되었습니다."
-              echo "사람 리뷰어의 APPROVED 상태가 최소 1건 필요합니다."
-              exit 1
+          has_blocker="$(echo "${pr_json}" | jq -r '[.labels[].name] | index("ai-security-blocker") != null')"
+
+          comments_json="$(curl -fsSL \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${REPOSITORY}/issues/${PR_NUMBER}/comments?per_page=100")"
+
+          hits="$(echo "${comments_json}" | jq -r '
+            [
+              .[]
+              | select(.user.login | test("coderabbit|gemini|code-assist"; "i"))
+              | select(.body | test("critical vulnerability|security vulnerability detected|취약점 발견|보안 취약점 발견|regression detected|회귀 발견|breaking change detected|high severity.*(security|vulnerab|regression|보안|회귀)"; "i"))
+            ]
+            | length
+          ')"
+
+          if [ "${hits}" -eq 0 ]; then
+            if [ "${has_blocker}" = "true" ]; then
+              status_code="$(curl -sS -o /tmp/remove-label-response.txt -w "%{http_code}" -X DELETE \
+                -H "Authorization: Bearer ${GH_TOKEN}" \
+                -H "Accept: application/vnd.github+json" \
+                "https://api.github.com/repos/${REPOSITORY}/issues/${PR_NUMBER}/labels/ai-security-blocker")"
+
+              if [ "${status_code}" != "200" ] && [ "${status_code}" != "204" ] && [ "${status_code}" != "404" ]; then
+                echo "stale blocker 라벨 제거 실패(status=${status_code})"
+                cat /tmp/remove-label-response.txt || true
+                exit 1
+              fi
+
+              echo "stale blocker 라벨 제거 완료"
             fi
 
-            echo "Blocker detected, human approval count: ${approvals}"
+            echo "AI 댓글에서 actionable blocker 신호 없음: 승인 강제 조건 없음"
+            exit 0
           fi
 
+          reviews_json="$(curl -fsSL \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${REPOSITORY}/pulls/${PR_NUMBER}/reviews?per_page=100")"
+
+          approvals="$(echo "${reviews_json}" | jq -r '
+            reduce .[] as $review (
+              {};
+              .[$review.user.login] = {
+                state: $review.state,
+                user_type: $review.user.type
+              }
+            )
+            | to_entries
+            | map(select(.value.state == "APPROVED" and .value.user_type != "Bot"))
+            | length
+          ')"
+
+          if [ "${approvals}" -lt 1 ]; then
+            echo "AI 리뷰에서 보안/회귀 이슈가 감지되었습니다."
+            echo "사람 리뷰어의 APPROVED 상태가 최소 1건 필요합니다."
+            exit 1
+          fi
+
+          echo "Blocker detected, human approval count: ${approvals}"
           echo "AI review policy check passed."
