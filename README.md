@@ -32,6 +32,8 @@ npm run test:lighthouse
 
 ## CI/CD
 - Web CI: 정적 검증 + 린트 + 시크릿 스캔 + E2E + Lighthouse
+- E2E 아티팩트 자동 업로드(Playwright report, test-results)
+- PR마다 `CI Visual Report` 코멘트 자동 생성(성공/실패 무관 스크린샷 + 샘플 비디오 링크)
 - AI PR Review / AI Review Policy / CodeQL
-- PR Preview(Netlify), SBOM(CycloneDX)
+- PR Preview(Netlify) 코멘트에 자동 화면 캡처 이미지 첨부, SBOM(CycloneDX)
 - Pages 배포 후 헬스체크, 실패 시 롤백 시도

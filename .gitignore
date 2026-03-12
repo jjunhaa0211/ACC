@@ -4,3 +4,4 @@ dist/
 coverage/
 .lighthouseci/
 test-results/
+playwright-report/
