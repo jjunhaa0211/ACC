@@ -43,7 +43,9 @@ jobs:
             echo "## 🔍 AI 앱 리뷰 요청"
             echo
             echo "/gemini review"
+            echo "한국어(ko-KR)로 리뷰해주세요. 중요도 높은 이슈를 먼저 정리해주세요."
             echo "@coderabbitai review"
+            echo "Please review this PR in Korean (ko-KR). Prioritize critical issues first."
             echo
             echo "중점 검토 항목:"
             echo "- 보안 취약점/민감정보 노출 가능성"

@@ -48,6 +48,7 @@ jobs:
             echo
             echo "- 실행 모드: 자동 PR(Fallback only)"
             echo "- 상세 AI 리뷰는 GitHub App에서 \`/gemini review\`, \`@coderabbitai review\`로 요청하세요."
+            echo "- 요청 시 한국어 응답을 원하면 \`한국어(ko-KR)로 리뷰해주세요\` 문구를 함께 남겨주세요."
             echo
             echo "### Fallback (Rule-based)"
             cat fallback-review.md
