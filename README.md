@@ -37,3 +37,31 @@ npm run test:lighthouse
 - AI PR Review / AI Review Policy / CodeQL
 - PR Preview(Netlify) 코멘트에 자동 화면 캡처 이미지 첨부, SBOM(CycloneDX)
 - Pages 배포 후 헬스체크, 실패 시 롤백 시도
+
+## Universal CI Automation (`acc-ci`)
+어떤 프로젝트든 한 번에 테스트/Mock/CI를 붙이기 위한 범용 자동화 CLI입니다.
+
+```bash
+# 현재 프로젝트 자동 초기화 (설정 + mock 테스트 + universal CI 워크플로 생성 + 검증)
+npm run acc-ci:bootstrap
+
+# 개별 명령
+npm run acc-ci -- init --project .
+npm run acc-ci -- scaffold-tests --project .
+npm run acc-ci -- setup-ci --project . --provider github
+npm run acc-ci -- verify --project . --ci
+```
+
+생성되는 핵심 파일:
+- `.acci/config.json` (프로젝트별 자동화 설정)
+- `.github/workflows/acc-universal-ci.yml` (범용 CI 템플릿)
+- `tests/mocks/users.mock.json` (mock 시나리오)
+- `tests/generated/mock-contract.test.mjs` (mock 계약 테스트, Node 기준)
+
+## Wiki 문서 소스
+- 위키 원본 마크다운: `wiki/*.md`
+- 동기화 스크립트: `.github/scripts/sync-wiki.sh`
+
+```bash
+bash .github/scripts/sync-wiki.sh jjunhaa0211/ACC
+```

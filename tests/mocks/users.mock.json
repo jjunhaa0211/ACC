@@ -1,0 +1,45 @@
+{
+  "version": "1.0.0",
+  "generatedAt": "2026-03-12T01:38:47.780Z",
+  "scenarios": [
+    {
+      "id": "users-list-default",
+      "description": "기본 사용자 조회 응답",
+      "request": {
+        "method": "GET",
+        "path": "/api/users"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "users": [
+            {
+              "id": "u_001",
+              "name": "Alice",
+              "role": "admin"
+            },
+            {
+              "id": "u_002",
+              "name": "Bob",
+              "role": "editor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "users-list-empty",
+      "description": "빈 사용자 목록 응답",
+      "request": {
+        "method": "GET",
+        "path": "/api/users?empty=true"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "users": []
+        }
+      }
+    }
+  ]
+}
