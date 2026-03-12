@@ -35,6 +35,7 @@ jobs:
           test -f index.html
           test -f script.js
           test -f eslint.config.js
+          test -f .github/scripts/check-dependency-audit.mjs
           test -f .github/scripts/check-static-site.mjs
           test -f .github/scripts/capture-pr-screenshot.mjs
           test -f .github/scripts/capture-pr-video.mjs
@@ -45,6 +46,7 @@ jobs:
         run: |
           node --check script.js
           node --check eslint.config.js
+          node --check .github/scripts/check-dependency-audit.mjs
           node --check .github/scripts/check-static-site.mjs
           node --check .github/scripts/capture-pr-screenshot.mjs
           node --check .github/scripts/capture-pr-video.mjs
@@ -88,25 +90,61 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check dependency graph status
-        id: dep_graph
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          status=$(gh api "repos/${{ github.repository }}" --jq '.security_and_analysis.dependency_graph.status' 2>/dev/null || echo "unknown")
-          if [ -z "$status" ] || [ "$status" = "null" ]; then
-            status="unknown"
-          fi
-          echo "status=${status}" >> "$GITHUB_OUTPUT"
-          echo "Dependency graph status: ${status}"
+      - name: Checkout (full history)
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
-      - name: Dependency review
-        if: steps.dep_graph.outputs.status == 'enabled'
-        uses: actions/dependency-review-action@v4
+      - name: Detect dependency file changes
+        id: dep_changes
+        run: |
+          set -euo pipefail
+          base_sha="${{ github.event.pull_request.base.sha }}"
+          head_sha="${{ github.event.pull_request.head.sha }}"
+
+          git diff --name-only "${base_sha}" "${head_sha}" > changed-files.txt
+          echo "Changed files between base/head:"
+          cat changed-files.txt || true
+
+          dep_changed=false
+          if grep -Eq '(^|/)(package\.json|package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock)$' changed-files.txt; then
+            dep_changed=true
+          fi
+
+          echo "dep_changed=${dep_changed}" >> "$GITHUB_OUTPUT"
+          echo "Dependency files changed: ${dep_changed}"
+
+      - name: Setup Node
+        if: steps.dep_changes.outputs.dep_changed == 'true'
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        if: steps.dep_changes.outputs.dep_changed == 'true'
+        run: npm ci --ignore-scripts
+
+      - name: Run npm audit report
+        if: steps.dep_changes.outputs.dep_changed == 'true'
+        run: npm audit --omit=dev --json > npm-audit.json || true
+
+      - name: Enforce dependency audit gate
+        if: steps.dep_changes.outputs.dep_changed == 'true'
+        run: node .github/scripts/check-dependency-audit.mjs npm-audit.json
+
+      - name: Upload dependency audit artifact
+        if: always() && steps.dep_changes.outputs.dep_changed == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: dependency-audit-${{ github.run_id }}
+          retention-days: 14
+          if-no-files-found: warn
+          path: npm-audit.json
 
       - name: Skip notice
-        if: steps.dep_graph.outputs.status != 'enabled'
-        run: echo "Dependency Graph가 비활성이어서 Dependency Review를 건너뜁니다."
+        if: steps.dep_changes.outputs.dep_changed != 'true'
+        run: echo "의존성 관련 파일 변경이 없어 Dependency Review를 건너뜁니다."
 
   e2e-playwright:
     name: E2E (Playwright)
