@@ -198,6 +198,31 @@ async function runCommandGroup(label, commands, options) {
   }
 }
 
+function normalizeCommandList(commands) {
+  if (!Array.isArray(commands)) {
+    return [];
+  }
+  return commands
+    .filter((command) => typeof command === "string")
+    .map((command) => command.trim())
+    .filter((command) => command.length > 0);
+}
+
+function mergeUniqueCommands(primary, fallback) {
+  const merged = [];
+  const seen = new Set();
+
+  for (const command of [...normalizeCommandList(primary), ...normalizeCommandList(fallback)]) {
+    if (seen.has(command)) {
+      continue;
+    }
+    seen.add(command);
+    merged.push(command);
+  }
+
+  return merged;
+}
+
 export async function verifyProject({
   projectDir,
   ci = false,
@@ -215,6 +240,24 @@ export async function verifyProject({
     console.log(`mock validation passed: ${path.relative(projectDir, mockStatus.file)} (${mockStatus.scenarios} scenarios)`);
   }
 
+  const ecosystem = config.project?.ecosystem || detectEcosystem(projectDir);
+  const plugin = getPlugin(ecosystem);
+  const pluginCommands = plugin ? await plugin.resolveCommands(projectDir) : defaultCommands();
+  const configCommands = config.commands || {};
+
+  const effectiveCommands = {
+    install: mergeUniqueCommands(configCommands.install, pluginCommands.install),
+    lint: normalizeCommandList(configCommands.lint).length > 0
+      ? normalizeCommandList(configCommands.lint)
+      : normalizeCommandList(pluginCommands.lint),
+    test: normalizeCommandList(configCommands.test).length > 0
+      ? normalizeCommandList(configCommands.test)
+      : normalizeCommandList(pluginCommands.test),
+    coverage: normalizeCommandList(configCommands.coverage).length > 0
+      ? normalizeCommandList(configCommands.coverage)
+      : normalizeCommandList(pluginCommands.coverage)
+  };
+
   const env = ci ? { CI: "1" } : {};
   const options = {
     cwd: projectDir,
@@ -222,23 +265,23 @@ export async function verifyProject({
     dryRun
   };
 
-  await runCommandGroup("install", config.commands?.install || [], options);
+  await runCommandGroup("install", effectiveCommands.install, options);
 
   if (config.qualityGates?.requireLint) {
-    await runCommandGroup("lint", config.commands?.lint || [], options);
+    await runCommandGroup("lint", effectiveCommands.lint, options);
   }
 
   if (config.qualityGates?.requireTests) {
-    await runCommandGroup("test", config.commands?.test || [], options);
+    await runCommandGroup("test", effectiveCommands.test, options);
   }
 
   if (withCoverage) {
-    await runCommandGroup("coverage", config.commands?.coverage || [], options);
+    await runCommandGroup("coverage", effectiveCommands.coverage, options);
   }
 
   return {
     ok: true,
-    ecosystem: config.project?.ecosystem,
+    ecosystem,
     projectDir
   };
 }

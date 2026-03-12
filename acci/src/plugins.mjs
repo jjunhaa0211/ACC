@@ -12,6 +12,26 @@ function hasScript(pkg, scriptName) {
   return Boolean(pkg && pkg.scripts && pkg.scripts[scriptName]);
 }
 
+function hasPlaywright(pkg) {
+  if (!pkg || typeof pkg !== "object") {
+    return false;
+  }
+
+  const deps = {
+    ...(pkg.dependencies || {}),
+    ...(pkg.devDependencies || {}),
+    ...(pkg.peerDependencies || {}),
+    ...(pkg.optionalDependencies || {})
+  };
+
+  if (deps["@playwright/test"] || deps.playwright || deps["playwright-core"]) {
+    return true;
+  }
+
+  const scripts = Object.values(pkg.scripts || {}).join(" ");
+  return /playwright/i.test(scripts);
+}
+
 async function scaffoldMockData(projectDir, { force = false } = {}) {
   const mockDir = path.join(projectDir, "tests", "mocks");
   await ensureDir(mockDir);
@@ -83,8 +103,14 @@ async function nodeCommands(projectDir) {
   const packageJsonPath = path.join(projectDir, "package.json");
   const pkg = fileExists(packageJsonPath) ? await readJson(packageJsonPath) : {};
   const hasPackageLock = fileExists(path.join(projectDir, "package-lock.json"));
+  const needsPlaywright = hasPlaywright(pkg);
 
   const install = [hasPackageLock ? "npm ci" : "npm install"];
+  if (needsPlaywright) {
+    install.push(
+      "node -e \"if (process.env.CI === '1') { const { execSync } = require('node:child_process'); try { execSync('npx playwright install --with-deps chromium', { stdio: 'inherit' }); } catch (error) { execSync('npx playwright install chromium', { stdio: 'inherit' }); } }\""
+    );
+  }
   const lint = hasScript(pkg, "lint") ? ["npm run lint"] : ["npm run lint --if-present"];
 
   const test = [];
