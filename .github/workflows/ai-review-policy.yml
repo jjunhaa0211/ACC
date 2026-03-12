@@ -53,7 +53,7 @@ jobs:
             [
               .[]
               | select(.user.login | test("coderabbit|gemini|code-assist"; "i"))
-              | select(.body | test("high severity|critical vulnerability|security vulnerability|vulnerab|취약점|보안 취약|regression detected|회귀 발견|breaking change"; "i"))
+              | select(.body | test("critical vulnerability|security vulnerability detected|취약점 발견|보안 취약점 발견|regression detected|회귀 발견|breaking change detected|high severity.*(security|vulnerab|regression|보안|회귀)"; "i"))
             ]
             | length
           ')"
