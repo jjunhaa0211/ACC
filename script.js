@@ -58,6 +58,8 @@ const pairKeyBase = emojiCatalog.length + 1;
 const broadPhaseBuckets = new Map();
 const seenCollisionPairs = new Set();
 const collisionPairKeys = [];
+const BUCKET_COORD_OFFSET = 32768;
+const BUCKET_COORD_SPAN = 65536;
 let nextSymbolIndex = 0;
 
 resetSymbolPool();
@@ -169,6 +171,10 @@ function getEmojiById(id) {
   return emojiById.get(id) ?? null;
 }
 
+function getBucketKey(cellX, cellY) {
+  return (cellY + BUCKET_COORD_OFFSET) * BUCKET_COORD_SPAN + (cellX + BUCKET_COORD_OFFSET);
+}
+
 function makeEmojiElement(id, symbol) {
   const element = emojiTemplate.content.firstElementChild?.cloneNode(true);
   if (!(element instanceof HTMLElement)) {
@@ -217,6 +223,10 @@ function createEmoji(symbol) {
     angle: randomBetween(0, 360),
     radius,
     dragging: false,
+    lastRenderX: Number.NaN,
+    lastRenderY: Number.NaN,
+    lastRenderAngle: Number.NaN,
+    lastRenderScale: Number.NaN,
     element
   };
 
@@ -296,6 +306,15 @@ function resolveViewportCollision(emoji) {
 
 function resolveRectCollision(emoji, rect) {
   if (rect.width <= 0 || rect.height <= 0) {
+    return;
+  }
+
+  if (
+    emoji.x + emoji.radius < rect.left ||
+    emoji.x - emoji.radius > rect.right ||
+    emoji.y + emoji.radius < rect.top ||
+    emoji.y - emoji.radius > rect.bottom
+  ) {
     return;
   }
 
@@ -440,7 +459,7 @@ function resolveEmojiCollisions() {
 
     for (let cellY = minCellY; cellY <= maxCellY; cellY += 1) {
       for (let cellX = minCellX; cellX <= maxCellX; cellX += 1) {
-        const bucketKey = `${cellX}:${cellY}`;
+        const bucketKey = getBucketKey(cellX, cellY);
         let bucket = broadPhaseBuckets.get(bucketKey);
         if (!bucket) {
           bucket = [];
@@ -579,7 +598,24 @@ function step(deltaTime, buttonRect) {
 function render() {
   for (const emoji of emojis) {
     const scale = emoji.dragging ? 1.08 : 1;
-    emoji.element.style.transform = `translate3d(${emoji.x - emoji.radius}px, ${emoji.y - emoji.radius}px, 0) rotate(${emoji.angle}deg) scale(${scale})`;
+    const renderX = Math.round((emoji.x - emoji.radius) * 100) / 100;
+    const renderY = Math.round((emoji.y - emoji.radius) * 100) / 100;
+    const renderAngle = Math.round(emoji.angle * 100) / 100;
+
+    if (
+      renderX === emoji.lastRenderX &&
+      renderY === emoji.lastRenderY &&
+      renderAngle === emoji.lastRenderAngle &&
+      scale === emoji.lastRenderScale
+    ) {
+      continue;
+    }
+
+    emoji.element.style.transform = `translate3d(${renderX}px, ${renderY}px, 0) rotate(${renderAngle}deg) scale(${scale})`;
+    emoji.lastRenderX = renderX;
+    emoji.lastRenderY = renderY;
+    emoji.lastRenderAngle = renderAngle;
+    emoji.lastRenderScale = scale;
   }
 }
 
