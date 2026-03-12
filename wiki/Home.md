@@ -21,3 +21,4 @@
 - [Commands and Config](Commands-and-Config)
 - [Plugin Development](Plugin-Development)
 - [CI Examples](CI-Examples)
+- [AI PR Contract Policy](AI-PR-Contract-Policy)

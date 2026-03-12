@@ -35,6 +35,7 @@ npm run test:lighthouse
 - E2E 아티팩트 자동 업로드(Playwright report, test-results)
 - PR마다 `CI Visual Report` 코멘트 자동 생성(성공/실패 무관 스크린샷 + 샘플 비디오 링크)
 - `Web CI`/`ACC Universal CI`/`SBOM` 완료 후 PR에 `Final CI Digest` 코멘트 자동 생성 + `@codex review` 트리거 코멘트 생성
+- AI PR 본문 계약(요구사항서/변경 전후/커밋/검증) 자동 강제: [docs/ai-pr-contract-policy.md](docs/ai-pr-contract-policy.md)
 - AI PR Review / AI Review Policy / CodeQL
 - Gemini 한국어 리뷰 가이드: `.gemini/styleguide.md`
 - CodeRabbit 한국어 기본 언어 설정: `.coderabbit.yaml`
