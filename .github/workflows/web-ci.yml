@@ -37,6 +37,7 @@ jobs:
           test -f eslint.config.js
           test -f .github/scripts/check-static-site.mjs
           test -f .github/scripts/capture-pr-screenshot.mjs
+          test -f .github/scripts/capture-pr-video.mjs
           test -f .github/scripts/serve-static-ci.mjs
           test -f .github/scripts/scan-secrets.mjs
 
@@ -46,6 +47,7 @@ jobs:
           node --check eslint.config.js
           node --check .github/scripts/check-static-site.mjs
           node --check .github/scripts/capture-pr-screenshot.mjs
+          node --check .github/scripts/capture-pr-video.mjs
           node --check .github/scripts/review-fallback.mjs
           node --check .github/scripts/serve-static-ci.mjs
           node --check .github/scripts/scan-secrets.mjs
@@ -147,6 +149,11 @@ jobs:
         continue-on-error: true
         run: npm run capture:pr-screenshot -- test-results/ci/pr-preview.png
 
+      - name: Capture CI visual video
+        if: always()
+        continue-on-error: true
+        run: npm run capture:pr-video -- test-results/ci/pr-preview.webm
+
       - name: Prepare visual bundle
         if: always() && github.event_name == 'pull_request'
         id: visual_bundle
@@ -166,7 +173,12 @@ jobs:
             has_image=true
           fi
 
-          video_file=$(find test-results -type f -name "*.webm" | head -n 1 || true)
+          video_file=""
+          if [ -f "test-results/ci/pr-preview.webm" ]; then
+            video_file="test-results/ci/pr-preview.webm"
+          else
+            video_file=$(find test-results -type f -name "*.webm" | head -n 1 || true)
+          fi
           if [ -n "${video_file}" ]; then
             cp "${video_file}" "${latest_dir}/e2e-sample.webm"
             cp "${video_file}" "${run_dir}/e2e-sample.webm"
