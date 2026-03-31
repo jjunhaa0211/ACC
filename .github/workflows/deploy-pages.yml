@@ -45,7 +45,7 @@ jobs:
 
     steps:
       - name: Configure Pages
-        uses: actions/configure-pages@v5
+        uses: actions/configure-pages@v6
 
       - name: Deploy
         id: deployment
@@ -116,7 +116,7 @@ jobs:
 
     steps:
       - name: Configure Pages
-        uses: actions/configure-pages@v5
+        uses: actions/configure-pages@v6
 
       - name: Deploy rollback artifact
         uses: actions/deploy-pages@v4
