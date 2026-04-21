@@ -27,6 +27,6 @@
     "@lhci/cli": "^0.15.1",
     "@playwright/test": "^1.55.0",
     "eslint": "^9.22.0",
-    "globals": "^17.4.0"
+    "globals": "^17.5.0"
   }
 }
