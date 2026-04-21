@@ -423,7 +423,7 @@ jobs:
 
       - name: Post final CI digest and trigger Codex connector
         if: always() && github.event_name == 'pull_request'
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         env:
           QUALITY_GATE_RESULT: ${{ needs.quality-gate.result }}
           SECRET_SCAN_RESULT: ${{ needs.secret-scan.result }}
@@ -603,7 +603,7 @@ jobs:
 
       - name: Trigger Codex connector with fresh mention
         if: always() && github.event_name == 'pull_request'
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const prNumber = context.payload.pull_request?.number;
